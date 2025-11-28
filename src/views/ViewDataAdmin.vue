@@ -1,32 +1,181 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import api from "../api/api";
 
-const dataAdmin = ref([]);
+// Data
+const newCustomers = ref([]);
 const loading = ref(true);
 
+// Search & Filter state
+const searchKeyword = ref("");
+const filterDate = ref("");
+const filterProgress = ref("all");
+const selectedSegmen = ref("all");
+
+// Load data
 onMounted(async () => {
   try {
     const res = await api.get("/new-customer");
-    dataAdmin.value = res.data.data; // sesuai JSON
+    newCustomers.value = res.data.data; // sesuai response JSON
   } catch (e) {
     console.error(e);
   } finally {
     loading.value = false;
   }
 });
+
+// Filtered Customers
+const filteredCustomers = computed(() => {
+  return newCustomers.value.filter((c) => {
+    const keyword = searchKeyword.value.toLowerCase();
+    const matchesKeyword =
+      c.date.toLowerCase().includes(keyword) ||
+      c.phone.toLowerCase().includes(keyword) ||
+      c.name.toLowerCase().includes(keyword) ||
+      c.progress.toLowerCase().includes(keyword) ||
+      c.pic.toLowerCase().includes(keyword) ||
+      c.segmen.toLowerCase().includes(keyword) ||
+      c.via.toLowerCase().includes(keyword) ||
+      c.country.toLowerCase().includes(keyword) ||
+      c.social_media_id.toLowerCase().includes(keyword) ||
+      c.tour_packages.toLowerCase().includes(keyword) ||
+      c.check_in.toLowerCase().includes(keyword) ||
+      c.check_out.toLowerCase().includes(keyword) ||
+      c.hotel.toLowerCase().includes(keyword) ||
+      c.notes.toLowerCase().includes(keyword);
+
+    const matchesDate = filterDate.value ? c.date === filterDate.value : true;
+
+    const matchesProgress =
+      filterProgress.value && filterProgress.value !== "all"
+        ? c.progress.toLowerCase() === filterProgress.value.toLowerCase()
+        : true;
+
+    const matchesSegmen =
+      selectedSegmen.value && selectedSegmen.value !== "all"
+        ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
+        : true;
+
+    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+  });
+});
+
+// Unique Segmen untuk filter
+const uniqueSegmens = computed(() => {
+  const segmens = new Set();
+  newCustomers.value.forEach((c) => {
+    if (c.segmen) segmens.add(c.segmen);
+  });
+  return Array.from(segmens);
+});
+
+// Download CSV
+const downloadCSV = () => {
+  const headers = [
+    "Date",
+    "Phone",
+    "Name",
+    "Progress",
+    "PIC",
+    "Segmen",
+    "Via",
+    "Country",
+    "Social Media ID",
+    "Tour Packages",
+    "Check In",
+    "Check Out",
+    "Hotel",
+    "Notes",
+  ];
+
+  const rows = filteredCustomers.value.map((c) => [
+    c.date,
+    c.phone,
+    c.name,
+    c.progress,
+    c.pic,
+    c.segmen,
+    c.via,
+    c.country,
+    c.social_media_id,
+    c.tour_packages,
+    c.check_in,
+    c.check_out,
+    c.hotel,
+    c.notes,
+  ]);
+
+  const csvContent =
+    "data:text/csv;charset=utf-8," +
+    [headers, ...rows].map((e) => e.join(",")).join("\n");
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "view_data_admin.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 </script>
 
 <template>
   <div class="p-6">
     <h1 class="text-2xl font-bold mb-4">Data Admin</h1>
 
-    <div v-if="loading">Loading...</div>
+    <!-- Search & Filters -->
+    <div class="mb-4 flex flex-wrap gap-2 items-end">
+      <input
+        v-model="searchKeyword"
+        type="text"
+        placeholder="Search..."
+        class="input"
+      />
+      <input v-model="filterDate" type="date" class="input" />
+      <select v-model="filterProgress" class="input">
+        <option value="all">All Progress</option>
+        <option value="on progress">On Progress</option>
+        <option value="deal">Deal</option>
+        <option value="canceled">Canceled</option>
+      </select>
+      <select v-model="selectedSegmen" class="input">
+        <option value="all">All Segmen</option>
+        <option
+          v-for="segment in uniqueSegmens"
+          :key="segment"
+          :value="segment"
+        >
+          {{ segment }}
+        </option>
+      </select>
+      <button
+        @click="downloadCSV"
+        class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+      >
+        Download CSV
+      </button>
+      <button
+        @click="
+          () => {
+            searchKeyword = '';
+            filterDate = '';
+            filterProgress = 'all';
+            selectedSegmen = 'all';
+          }
+        "
+        class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
+      >
+        Reset Filters
+      </button>
+    </div>
 
+    <!-- Table -->
+    <div v-if="loading">Loading...</div>
     <table v-else class="w-full border text-sm">
       <thead>
         <tr class="bg-gray-200">
           <th class="p-2 border">NO</th>
+          <th class="p-2 border">Date</th>
           <th class="p-2 border">Name</th>
           <th class="p-2 border">Phone</th>
           <th class="p-2 border">PIC</th>
@@ -40,14 +189,12 @@ onMounted(async () => {
           <th class="p-2 border">Check Out</th>
           <th class="p-2 border">Hotel</th>
           <th class="p-2 border">Notes</th>
-          <th class="p-2 border">Created At</th>
-          <th class="p-2 border">Updated At</th>
         </tr>
       </thead>
-
       <tbody>
-        <tr v-for="(item, i) in dataAdmin" :key="item.id">
+        <tr v-for="(item, i) in filteredCustomers" :key="item.id">
           <td class="p-2 border">{{ i + 1 }}</td>
+          <td class="p-2 border">{{ item.date }}</td>
           <td class="p-2 border">{{ item.name }}</td>
           <td class="p-2 border">{{ item.phone }}</td>
           <td class="p-2 border">{{ item.pic }}</td>
@@ -61,8 +208,6 @@ onMounted(async () => {
           <td class="p-2 border">{{ item.check_out }}</td>
           <td class="p-2 border">{{ item.hotel }}</td>
           <td class="p-2 border">{{ item.notes }}</td>
-          <td class="p-2 border">{{ item.created_at }}</td>
-          <td class="p-2 border">{{ item.updated_at }}</td>
         </tr>
       </tbody>
     </table>

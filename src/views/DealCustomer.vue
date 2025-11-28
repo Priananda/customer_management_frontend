@@ -1,9 +1,15 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import api from "../api/api";
 
+// State
+const selectedCustomer = ref(null);
 const deals = ref([]);
 const newCustomers = ref([]);
+const searchKeyword = ref("");
+const filterDate = ref("");
+const filterProgress = ref("all");
+const selectedSegmen = ref("all");
 
 const dealForm = ref({
   id: null,
@@ -15,9 +21,7 @@ const dealForm = ref({
   payment_status: null,
 });
 
-const selectedCustomer = ref(null);
-
-// LOAD DATA
+// Fetch Data API
 const loadData = async () => {
   const nc = await api.get("/new-customer");
   newCustomers.value = nc.data.data;
@@ -26,19 +30,18 @@ const loadData = async () => {
   deals.value = dc.data.data;
 };
 
-// KETIKA PILIH CUSTOMER
+// Fungsi ketika pilih PIC
 const onSelectCustomer = () => {
   selectedCustomer.value = newCustomers.value.find(
     (c) => c.id == dealForm.value.new_customer_id
   );
 };
 
-// SUBMIT FORM (FormData)
+// Submit Form
 const saveDeal = async () => {
   const fd = new FormData();
 
   Object.keys(dealForm.value).forEach((key) => {
-    // ❗ Jangan kirim payment_status jika null (edit tanpa upload)
     if (key === "payment_status" && dealForm.value[key] === null) return;
 
     fd.append(key, dealForm.value[key]);
@@ -58,7 +61,7 @@ const saveDeal = async () => {
   loadData();
 };
 
-// EDIT
+// Edit
 const editDeal = (d) => {
   dealForm.value = {
     id: d.id,
@@ -72,12 +75,13 @@ const editDeal = (d) => {
   selectedCustomer.value = d.new_customer;
 };
 
-// DELETE
+// Delete
 const deleteDeal = async (id) => {
   await api.delete(`/deal-customer/${id}`);
   loadData();
 };
 
+// Reset Form untuk mengkosongkan input dan memulai create baru
 const reset = () => {
   dealForm.value = {
     id: null,
@@ -91,7 +95,133 @@ const reset = () => {
   selectedCustomer.value = null;
 };
 
+// Di Mount
 onMounted(loadData);
+
+// Search & Filter
+const filteredDeals = computed(() => {
+  return deals.value.filter((d) => {
+    const c = d.new_customer;
+    if (!c) return false;
+
+    const keyword = searchKeyword.value.toLowerCase();
+
+    // Gabung semua field yang mau dicari keyword
+    const allFields = [
+      c.date,
+      c.phone,
+      c.name,
+      c.progress,
+      c.pic,
+      c.segmen,
+      c.via,
+      c.country,
+      c.social_media_id,
+      c.tour_packages,
+      c.check_in,
+      c.check_out,
+      c.hotel,
+      d.handler,
+      d.link_drive,
+      String(d.total_pax), // convert number ke string
+      d.activity,
+      d.payment_status ? d.payment_status.name || String(d.payment_status) : "",
+    ].map((f) => f?.toLowerCase() || "");
+
+    const matchesKeyword = allFields.some((f) => f.includes(keyword));
+
+    // Date filter
+    const matchesDate = filterDate.value ? c.date === filterDate.value : true;
+
+    // Progress filter
+    const matchesProgress =
+      filterProgress.value && filterProgress.value !== "all"
+        ? c.progress === filterProgress.value
+        : true;
+
+    // Segment filter
+    const matchesSegmen =
+      selectedSegmen.value && selectedSegmen.value !== "all"
+        ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
+        : true;
+
+    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+  });
+});
+
+// Unik Segment
+const uniqueSegmens = computed(() => {
+  const segmens = new Set();
+  deals.value.forEach((d) => {
+    const c = d.new_customer;
+    if (c && c.segmen) segmens.add(c.segmen);
+  });
+  return Array.from(segmens);
+});
+
+// Dowload File CSV
+const downloadCSV = () => {
+  const headers = [
+    "Customer Name",
+    "PIC",
+    "Date",
+    "Phone",
+    "Progress",
+    "Segmen",
+    "Country",
+    "Tour Packages",
+    "Check In",
+    "Check Out",
+    "Hotel",
+    "Handler",
+    "Link Drive",
+    "Total Pax",
+    "Activity",
+    "Payment Status",
+  ];
+
+  const rows = filteredDeals.value.map((d) => {
+    const c = d.new_customer || {};
+    return [
+      c.name || "",
+      c.pic || "",
+      c.date || "",
+      c.phone || "",
+      c.progress || "",
+      c.segmen || "",
+      c.country || "",
+      c.tour_packages || "",
+      c.check_in || "",
+      c.check_out || "",
+      c.hotel || "",
+      d.handler || "",
+      d.link_drive || "",
+      d.total_pax != null ? d.total_pax : "",
+      d.activity || "",
+      d.payment_status ? d.payment_status.name || d.payment_status : "",
+    ];
+  });
+
+  const csvContent =
+    "data:text/csv;charset=utf-8," +
+    [headers, ...rows].map((e) => e.join(",")).join("\n");
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "deal_customers.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+// Reset Filters
+const resetFilters = () => {
+  searchKeyword.value = "";
+  filterDate.value = "";
+  filterProgress.value = "all";
+  selectedSegmen.value = "all";
+};
 </script>
 
 <template>
@@ -148,7 +278,6 @@ onMounted(loadData);
         placeholder="Activity"
       />
 
-      <!-- FILE UPLOAD -->
       <input
         type="file"
         @change="(e) => (dealForm.payment_status = e.target.files[0])"
@@ -161,6 +290,63 @@ onMounted(loadData);
       >
         Save Deal
       </button>
+    </div>
+
+    <div class="mb-4 flex flex-wrap gap-2 items-end">
+      <!-- Search -->
+      <div>
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="Search..."
+          class="input"
+        />
+      </div>
+
+      <!-- Filter Date -->
+      <div>
+        <input v-model="filterDate" type="date" class="input" />
+      </div>
+
+      <!-- Filter Progress -->
+      <div>
+        <select v-model="filterProgress" class="input">
+          <option value="all">All Progress</option>
+          <option value="on progress">On Progress</option>
+          <option value="deal">Deal</option>
+          <option value="canceled">Canceled</option>
+        </select>
+      </div>
+
+      <!-- Filter Segmen -->
+      <div>
+        <select v-model="selectedSegmen" class="input">
+          <option value="all">All Segmen</option>
+          <option
+            v-for="segment in uniqueSegmens"
+            :key="segment"
+            :value="segment"
+          >
+            {{ segment }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Download CSV -->
+      <div>
+        <button
+          @click="downloadCSV"
+          class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+        >
+          Download CSV
+        </button>
+        <button
+          @click="resetFilters"
+          class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
+        >
+          Reset Filters
+        </button>
+      </div>
     </div>
 
     <table class="w-full border bg-white shadow">
@@ -187,7 +373,7 @@ onMounted(loadData);
         </tr>
       </thead>
       <tbody>
-        <tr v-for="d in deals" :key="d.id">
+        <tr v-for="d in filteredDeals" :key="d.id">
           <td class="p-2">{{ d.new_customer?.name }}</td>
           <td class="p-2">{{ d.new_customer?.pic }}</td>
           <td class="p-2">{{ d.new_customer?.date }}</td>

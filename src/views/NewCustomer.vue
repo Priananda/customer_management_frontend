@@ -1,17 +1,21 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import api from "../api/api";
 
-// =================== AUTH ===================
+// Auth
 const token = localStorage.getItem("access_token");
 if (token) api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
 const user = JSON.parse(localStorage.getItem("user") || "{}");
 const role = user.role;
 
-// =================== STATE ===================
+// State
+const searchKeyword = ref("");
+const filterDate = ref("");
+const filterProgress = ref("all");
+const selectedSegmen = ref("all");
 const newCustomers = ref([]);
-const editId = ref(null); // null = create, number = update
+const editId = ref(null);
 
 const form = ref({
   date: "",
@@ -30,7 +34,7 @@ const form = ref({
   notes: "",
 });
 
-// =================== FETCH DATA ===================
+// Fetch Data API
 const getNewCustomers = async () => {
   try {
     const res = await api.get("/new-customer");
@@ -56,7 +60,7 @@ const getNewCustomers = async () => {
   }
 };
 
-// =================== SUBMIT FORM ===================
+// Submit Form
 const submitForm = async () => {
   try {
     if (editId.value) {
@@ -72,7 +76,7 @@ const submitForm = async () => {
   }
 };
 
-// =================== EDIT ===================
+// Edit
 const editCustomer = (customer) => {
   editId.value = customer.id;
 
@@ -81,7 +85,7 @@ const editCustomer = (customer) => {
   });
 };
 
-// =================== DELETE ===================
+// Delete
 const deleteNewCustomer = async (id) => {
   try {
     if (!confirm("Are you sure?")) return;
@@ -92,25 +96,133 @@ const deleteNewCustomer = async (id) => {
   }
 };
 
-// =================== RESET ===================
+// Reset Form untuk mengkosongkan input dan memulai create baru
 const resetForm = () => {
   Object.keys(form.value).forEach((key) => (form.value[key] = ""));
   editId.value = null;
 };
 
-// =================== ON MOUNT ===================
+// Di Mount
 onMounted(() => {
   if (["admin", "super_admin", "pic", "staff"].includes(role)) {
     getNewCustomers();
   }
 });
+
+// Search & Filter
+const filteredCustomers = computed(() => {
+  return newCustomers.value.filter((c) => {
+    // Search field
+    const keyword = searchKeyword.value.toLowerCase();
+    const matchesKeyword =
+      c.date.toLowerCase().includes(keyword) ||
+      c.phone.toLowerCase().includes(keyword) ||
+      c.name.toLowerCase().includes(keyword) ||
+      c.progress.toLowerCase().includes(keyword) ||
+      c.pic.toLowerCase().includes(keyword) ||
+      c.segmen.toLowerCase().includes(keyword) ||
+      c.via.toLowerCase().includes(keyword) ||
+      c.country.toLowerCase().includes(keyword) ||
+      c.social_media_id.toLowerCase().includes(keyword) ||
+      c.tour_packages.toLowerCase().includes(keyword) ||
+      c.check_in.toLowerCase().includes(keyword) ||
+      c.check_out.toLowerCase().includes(keyword) ||
+      c.hotel.toLowerCase().includes(keyword) ||
+      c.notes.toLowerCase().includes(keyword);
+
+    // Date
+    const matchesDate = filterDate.value ? c.date === filterDate.value : true;
+
+    // Progress
+    const matchesProgress =
+      filterProgress.value && filterProgress.value !== "all"
+        ? c.progress === filterProgress.value
+        : true;
+
+    // Segment
+    const matchesSegmen =
+      selectedSegmen.value && selectedSegmen.value !== "all"
+        ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
+        : true;
+
+    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+  });
+});
+
+// Unik Segment
+const uniqueSegmens = computed(() => {
+  const segmens = new Set();
+  newCustomers.value.forEach((c) => {
+    if (c.segmen) segmens.add(c.segmen);
+  });
+  return Array.from(segmens);
+});
+
+// Dowload File CSV
+const downloadCSV = () => {
+  const headers = [
+    "Date",
+    "Phone",
+    "Name",
+    "Progress",
+    "PIC",
+    "Segmen",
+    "Via",
+    "Country",
+    "Social Media ID",
+    "Tour Packages",
+    "Check In",
+    "Check Out",
+    "Hotel",
+    "Notes",
+  ];
+
+  const rows = filteredCustomers.value.map((c) => [
+    c.date,
+    c.phone,
+    c.name,
+    c.progress,
+    c.pic,
+    c.segmen,
+    c.via,
+    c.country,
+    c.social_media_id,
+    c.tour_packages,
+    c.check_in,
+    c.check_out,
+    c.hotel,
+    c.notes,
+  ]);
+
+  const csvContent =
+    "data:text/csv;charset=utf-8," +
+    [headers, ...rows].map((e) => e.join(",")).join("\n");
+
+  // Menyiapkan agar url agar valid dimasukkan
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  // Proses menyiapkan akan di dowload
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "new_customers.csv");
+
+  // Proses mendowload
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+// Reset Filters
+const resetFilters = () => {
+  searchKeyword.value = "";
+  filterDate.value = "";
+  filterProgress.value = "all";
+  selectedSegmen.value = "all";
+};
 </script>
 
 <template>
   <div class="p-4 max-w-6xl mx-auto">
     <h2 class="text-2xl font-bold mb-4">New Customers</h2>
-
-    <!-- ===== FORM ===== -->
     <form
       @submit.prevent="submitForm"
       class="mb-6 grid grid-cols-2 gap-4 bg-white p-4 rounded-lg shadow"
@@ -177,7 +289,63 @@ onMounted(() => {
       </button>
     </form>
 
-    <!-- ===== TABLE ===== -->
+    <div class="mb-4 flex flex-wrap gap-2 items-end">
+      <!-- Search -->
+      <div>
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="Search..."
+          class="input"
+        />
+      </div>
+
+      <!-- Filter Date -->
+      <div>
+        <input v-model="filterDate" type="date" class="input" />
+      </div>
+
+      <!-- Filter Progress -->
+      <div>
+        <select v-model="filterProgress" class="input">
+          <option value="all">All Progress</option>
+          <option value="on progress">On Progress</option>
+          <option value="deal">Deal</option>
+          <option value="canceled">Canceled</option>
+        </select>
+      </div>
+
+      <!-- Filter Segmen -->
+      <div>
+        <select v-model="selectedSegmen" class="input">
+          <option value="all">All Segmen</option>
+          <option
+            v-for="segment in uniqueSegmens"
+            :key="segment"
+            :value="segment"
+          >
+            {{ segment }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Download CSV -->
+      <div>
+        <button
+          @click="downloadCSV"
+          class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+        >
+          Download CSV
+        </button>
+        <button
+          @click="resetFilters"
+          class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
+        >
+          Reset Filters
+        </button>
+      </div>
+    </div>
+
     <div class="overflow-x-auto">
       <table class="min-w-full bg-white border rounded-lg shadow">
         <thead class="bg-cyan-600 text-white">
@@ -202,7 +370,7 @@ onMounted(() => {
 
         <tbody>
           <tr
-            v-for="c in newCustomers"
+            v-for="c in filteredCustomers"
             :key="c.id"
             class="border-b hover:bg-gray-50"
           >
@@ -223,7 +391,7 @@ onMounted(() => {
 
             <td class="px-4 py-2 space-x-2">
               <button
-                v-if="['admin', 'super_admin', 'pic'].includes(role)"
+                v-if="['admin', 'staff', 'super_admin', 'pic'].includes(role)"
                 @click="editCustomer(c)"
                 class="bg-yellow-500 hover:bg-yellow-600 text-black px-2 py-1 rounded"
               >
@@ -231,7 +399,7 @@ onMounted(() => {
               </button>
 
               <button
-                v-if="['admin', 'super_admin', 'pic'].includes(role)"
+                v-if="['admin', 'staff', 'super_admin', 'pic'].includes(role)"
                 @click="deleteNewCustomer(c.id)"
                 class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded"
               >

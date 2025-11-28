@@ -1,13 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import DashboardHome from '../views/DashboardHome.vue';
+import Dashboard from '../layouts/Dashboard.vue';
 import RegisterPICStaff from '../views/RegisterPICStaff.vue';
 import LoginPICStaff from '../views/LoginPICStaff.vue';
 import LoginAdmin from '../views/LoginAdmin.vue';
 import LoginSuperAdmin from '../views/LoginSuperAdmin.vue';
-import Dashboard from '../views/Dashboard.vue';
 import NewCustomer from '../views/NewCustomer.vue';
 import DealCustomer from '../views/DealCustomer.vue';
-
-// Admin & Super_admin
 import ViewDataPIC from '../views/ViewDataPIC.vue';
 import ViewDataStaff from '../views/ViewDataStaff.vue';
 import ViewDataAdmin from '../views/ViewDataAdmin.vue';
@@ -15,53 +14,51 @@ import ViewDataAdmin from '../views/ViewDataAdmin.vue';
 import { authGuard } from './middleware.js';
 
 const routes = [
-  { path: '/register-pic-staff', name: 'RegisterPICStaff', component: RegisterPICStaff },
-  { path: '/login-pic-staff', name: 'LoginPICStaff', component: LoginPICStaff },
-  { path: '/login-admin', name: 'LoginAdmin', component: LoginAdmin },
-  { path: '/login-super-admin', name: 'LoginSuperAdmin', component: LoginSuperAdmin },
+  // Public routes
+  { path: '/register-pic-staff', component: RegisterPICStaff },
+  { path: '/login-pic-staff', component: LoginPICStaff },
+  { path: '/login-admin', component: LoginAdmin },
+  { path: '/login-super-admin', component: LoginSuperAdmin },
 
-  { 
-    path: '/dashboard', 
-    name: 'Dashboard', 
+  // Dashboard + Nested routes
+  {
+    path: '/dashboard',
     component: Dashboard,
     meta: { allowedRoles: ['pic','staff','admin','super_admin'] },
-    beforeEnter: authGuard
-  },
-  { 
-    path: '/new-customer', 
-    name: 'NewCustomer', 
-    component: NewCustomer,
-    meta: { allowedRoles:  ['pic','staff','admin','super_admin']  },
-    beforeEnter: authGuard
-  },
-   { 
-    path: '/deal-customer', 
-    name: 'DealCustomer', 
-    component: DealCustomer,
-    meta: { allowedRoles:  ['pic','staff','admin','super_admin']  },
-    beforeEnter: authGuard
-  },
-
-  // Admin & Super_admin
-  {
-    path: "/view-data-pic",
-    name: "ViewDataPic",
-    meta: { allowedRoles:  ['admin','super_admin']  },
-    component: ViewDataPIC,
-  },
-  {
-    path: "/view-data-staff",
-    name: "ViewDataStaff",
-    meta: { allowedRoles:  ['admin','super_admin']  },
-    component: ViewDataStaff,
-  },
-  {
-    path: "/view-data-admin",
-    name: "ViewDataAdmin",
-    meta: { allowedRoles:  ['admin','super_admin']  },
-    component: ViewDataAdmin,
+    beforeEnter: authGuard,
+    children: [
+      { path: 'home', component: DashboardHome },
+      { 
+        path: 'new-customer', 
+        component: NewCustomer,
+        meta: { allowedRoles: ['pic','staff','admin','super_admin'] }
+      },
+      { 
+        path: 'deal-customer', 
+        component: DealCustomer,
+        meta: { allowedRoles: ['pic','staff','admin','super_admin'] }
+      },
+      { 
+        path: 'view-data-pic', 
+        component: ViewDataPIC,
+        meta: { allowedRoles: ['admin','super_admin'] }
+      },
+      { 
+        path: 'view-data-staff', 
+        component: ViewDataStaff,
+        meta: { allowedRoles: ['admin','super_admin'] }
+      },
+      { 
+        path: 'view-data-admin', 
+        component: ViewDataAdmin,
+        meta: { allowedRoles: ['super_admin'] }
+      },
+      { path: '', redirect: 'new-customer' }
+    ]
   },
 
+  // fallback
+  { path: '/:pathMatch(.*)*', redirect: '/dashboard/home' }
 ];
 
 const router = createRouter({

@@ -1,5 +1,2 @@
-<template>
-  <router-view />
-</template>
-
-<script setup></script>
+<!-- Layout Global -->
+<template><router-view /></template>
