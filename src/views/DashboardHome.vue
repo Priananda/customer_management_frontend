@@ -5,16 +5,28 @@ import {
   Filter,
   RotateCcw,
   ChevronDown,
+  Users,
+  Loader,
+  CheckCircle2,
+  XCircle,
+  Download,
 } from "lucide-vue-next";
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import api from "../api/api";
+import { useAuthStore } from "../stores/auth";
 
-// Auth
-const token = localStorage.getItem("access_token");
-if (token) api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+// Ambil auth store
+const authStore = useAuthStore();
 
-const user = JSON.parse(localStorage.getItem("user") || "{}");
-const role = user.role;
+// Set token axios dari Pinia
+if (authStore.accessToken) {
+  api.defaults.headers.common[
+    "Authorization"
+  ] = `Bearer ${authStore.accessToken}`;
+}
+
+// Ambil role dari store
+const role = authStore.role;
 
 // State
 const searchKeyword = ref("");
@@ -24,7 +36,6 @@ const selectedSegmen = ref("all");
 const newCustomers = ref([]);
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
-const activeCard = ref(null);
 
 // Summary State
 const summary = ref({
@@ -82,6 +93,11 @@ onMounted(() => {
     getNewCustomers();
     getSummary();
   }
+  document.addEventListener("click", handleClickOutside);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleClickOutside);
 });
 
 // Search & Filter
@@ -106,12 +122,10 @@ const filteredCustomers = computed(() => {
       c.notes.toLowerCase().includes(keyword);
 
     const matchesDate = filterDate.value ? c.date === filterDate.value : true;
-
     const matchesProgress =
       filterProgress.value !== "all"
         ? c.progress === filterProgress.value
         : true;
-
     const matchesSegmen =
       selectedSegmen.value !== "all"
         ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
@@ -138,40 +152,52 @@ const resetFilters = () => {
   selectedSegmen.value = "all";
 };
 
-// Date dinamic
+// Current Date
 const currentDate = computed(() => {
   const today = new Date();
-
-  const optionsDate = {
+  return today.toLocaleDateString("id-ID", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  };
-
-  return today.toLocaleDateString("id-ID", optionsDate);
+  });
 });
 
-// helper untuk badge progress
+// Badge class
 const progressClass = (progress) => {
-  const p = (progress || "").toString().toLowerCase();
+  const p = (progress || "").toLowerCase();
   if (p === "deal")
     return "bg-green-100 text-green-800 border border-green-200";
   if (p === "on progress")
     return "bg-blue-100 text-blue-800 border border-blue-200";
-  if (p === "canceled" || p === "canceled")
-    return "bg-red-100 text-red-800 border border-red-200";
+  if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
+
+// Dropdown click outside
+function handleClickOutside(e) {
+  const progress = document.getElementById("progress-dropdown");
+  const segmen = document.getElementById("segmen-dropdown");
+
+  if (progress && !progress.contains(e.target))
+    showProgressDropdown.value = false;
+  if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
+}
+
+// Close all dropdowns on input focus
+function closeAllDropdowns() {
+  showProgressDropdown.value = false;
+  showSegmenDropdown.value = false;
+}
 </script>
 
 <template>
-  <div class="p-6 mx-auto">
+  <div class="p-4 max-w-6xl mx-auto">
     <!-- TITLE -->
     <h2
-      class="text-3xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
+      class="text-2xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
-      <component :is="Home" class="w-6 h-6 text-blue-500" /> Dashboard
+      Dashboard
     </h2>
     <p class="text-md mb-6 text-slate-600">
       See all deal, new customer, new chat, and summary report
@@ -185,53 +211,58 @@ const progressClass = (progress) => {
 
     <!-- SUMMARY CARDS -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <!-- Total Customers -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow border border-blue-500 flex flex-col items-center gap-1"
+        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
       >
-        <component :is="Users" class="w-7 h-7 text-blue-500 mb-1" />
-        <p class="font-medium">Total</p>
-        <h3 class="text-3xl font-bold text-slate-900">{{ summary.total }}</h3>
+        <Users class="w-6 h-6 text-blue-800 mb-1" />
+        <p class="font-medium text-md">Total</p>
+        <h3 class="text-xl font-bold text-slate-900">{{ summary.total }}</h3>
         <p class="text-sm text-slate-500">New Customer</p>
       </div>
 
+      <!-- On Progress -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow border border-blue-500 flex flex-col items-center gap-1"
+        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
       >
-        <component :is="Loader" class="w-7 h-7 text-blue-500 mb-1" />
-        <p class="font-medium">On Progress</p>
-        <h3 class="text-3xl font-bold text-slate-900">
+        <Loader class="w-6 h-6 text-yellow-600 mb-1" />
+        <p class="font-medium text-md">On Progress</p>
+        <h3 class="text-xl font-bold text-slate-900">
           {{ summary.onProgress }}
         </h3>
         <p class="text-sm text-slate-500">Currently handled</p>
       </div>
 
+      <!-- Deal -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow border border-blue-500 flex flex-col items-center gap-1"
+        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
       >
-        <component :is="CheckCircle2" class="w-7 h-7 text-blue-500 mb-1" />
-        <p class="font-medium">Deal</p>
-        <h3 class="text-3xl font-bold text-slate-900">{{ summary.deal }}</h3>
+        <CheckCircle2 class="w-6 h-6 text-green-600 mb-1" />
+        <p class="font-medium text-md">Deal</p>
+        <h3 class="text-xl font-bold text-slate-900">{{ summary.deal }}</h3>
         <p class="text-sm text-slate-500">Closed successfully</p>
       </div>
 
+      <!-- Canceled -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow border border-blue-500 flex flex-col items-center gap-1"
+        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
       >
-        <component :is="XCircle" class="w-7 h-7 text-blue-500 mb-1" />
-        <p class="font-medium">Canceled</p>
-        <h3 class="text-3xl font-bold text-slate-900">
+        <XCircle class="w-6 h-6 text-red-600 mb-1" />
+        <p class="font-medium text-md">Canceled</p>
+        <h3 class="text-xl font-bold text-slate-900">
           {{ summary.canceled }}
         </h3>
         <p class="text-sm text-slate-500">Canceled orders</p>
       </div>
 
+      <!-- Download Today Report -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow border border-blue-500 flex flex-col items-center justify-center gap-2"
+        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center justify-center gap-2"
       >
-        <component :is="Download" class="w-7 h-7 text-blue-500" />
-        <p class="font-medium">Today's Report</p>
+        <Download class="w-6 h-6 text-blue-800" />
+        <p class="font-medium text-sm sm:text-base">Today's Report</p>
         <button
-          class="underline text-blue-600 hover:text-blue-800"
+          class="underline text-blue-600 hover:text-blue-800 text-sm sm:text-base"
           @click="downloadCsv"
         >
           Download CSV
@@ -241,35 +272,40 @@ const progressClass = (progress) => {
 
     <!-- FILTERS MODERN -->
     <div
-      class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
     >
       <!-- Search -->
       <div class="relative">
         <Search class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
         <input
           v-model="searchKeyword"
+          @focus="closeAllDropdowns()"
           type="text"
           placeholder="Search..."
-          class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-blue-500"
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
       <!-- Date -->
       <div class="relative">
         <Calendar class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+
         <input
           v-model="filterDate"
+          @focus="closeAllDropdowns()"
           type="date"
-          class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-blue-500"
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
       <!-- Progress -->
-      <!-- CUSTOM SELECT PROGRESS -->
-      <div class="relative">
+      <div class="relative" id="progress-dropdown">
         <button
-          @click="showProgressDropdown = !showProgressDropdown"
-          class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between focus:ring-2 focus:ring-blue-500"
+          @click.stop="
+            closeAllDropdowns();
+            showProgressDropdown = !showProgressDropdown;
+          "
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -280,56 +316,59 @@ const progressClass = (progress) => {
           <ChevronDown class="w-4 h-4 text-slate-500" />
         </button>
 
-        <!-- DROPDOWN -->
-        <div
-          v-if="showProgressDropdown"
-          class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
-        >
+        <transition name="dropdown">
           <div
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-            @click="
-              filterProgress = 'all';
-              showProgressDropdown = false;
-            "
+            v-if="showProgressDropdown"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            All Progress
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="
+                filterProgress = 'all';
+                showProgressDropdown = false;
+              "
+            >
+              All Progress
+            </div>
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="
+                filterProgress = 'on progress';
+                showProgressDropdown = false;
+              "
+            >
+              On Progress
+            </div>
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="
+                filterProgress = 'deal';
+                showProgressDropdown = false;
+              "
+            >
+              Deal
+            </div>
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="
+                filterProgress = 'canceled';
+                showProgressDropdown = false;
+              "
+            >
+              Canceled
+            </div>
           </div>
-          <div
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-            @click="
-              filterProgress = 'on progress';
-              showProgressDropdown = false;
-            "
-          >
-            On Progress
-          </div>
-          <div
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-            @click="
-              filterProgress = 'deal';
-              showProgressDropdown = false;
-            "
-          >
-            Deal
-          </div>
-          <div
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-            @click="
-              filterProgress = 'canceled';
-              showProgressDropdown = false;
-            "
-          >
-            Canceled
-          </div>
-        </div>
+        </transition>
       </div>
 
       <!-- Segmen -->
-      <!-- CUSTOM SELECT SEGMEN -->
-      <div class="relative">
+      <div class="relative" id="segmen-dropdown">
         <button
-          @click="showSegmenDropdown = !showSegmenDropdown"
-          class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between focus:ring-2 focus:ring-blue-500"
+          @click.stop="
+            closeAllDropdowns();
+            showSegmenDropdown = !showSegmenDropdown;
+          "
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -340,40 +379,40 @@ const progressClass = (progress) => {
           <ChevronDown class="w-4 h-4 text-slate-500" />
         </button>
 
-        <!-- DROPDOWN LIST -->
-        <div
-          v-if="showSegmenDropdown"
-          class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
-        >
+        <transition name="dropdown">
           <div
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-            @click="
-              selectedSegmen = 'all';
-              showSegmenDropdown = false;
-            "
+            v-if="showSegmenDropdown"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            All Segmen
-          </div>
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="
+                selectedSegmen = 'all';
+                showSegmenDropdown = false;
+              "
+            >
+              All Segmen
+            </div>
 
-          <!-- Dynamic list -->
-          <div
-            v-for="segment in uniqueSegmens"
-            :key="segment"
-            class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
-            @click="
-              selectedSegmen = segment;
-              showSegmenDropdown = false;
-            "
-          >
-            {{ segment }}
+            <div
+              v-for="segment in uniqueSegmens"
+              :key="segment"
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              @click="
+                selectedSegmen = segment;
+                showSegmenDropdown = false;
+              "
+            >
+              {{ segment }}
+            </div>
           </div>
-        </div>
+        </transition>
       </div>
 
       <!-- Reset -->
       <button
         @click="resetFilters"
-        class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow"
+        class="flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-800 text-white font-semibold py-2 px-4 rounded-lg shadow"
       >
         <RotateCcw class="w-4 h-4" />
         Reset
@@ -381,11 +420,11 @@ const progressClass = (progress) => {
     </div>
 
     <!-- TABLE -->
-    <div class="overflow-x-auto rounded-lg shadow-sm">
+    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
       <table
-        class="min-w-full bg-white border border-slate-300 rounded-lg text-sm table-fixed"
+        class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
       >
-        <thead class="bg-blue-500 text-white">
+        <thead class="bg-blue-900 text-white">
           <tr>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[12%]">Phone</th>
@@ -461,131 +500,25 @@ const progressClass = (progress) => {
   </div>
 </template>
 
-<!-- <template>
-  <div class="p-6 max-w-7xl mx-auto">
-    <h2 class="text-3xl font-bold mb-6">Dashboard Home</h2>
-    <p class="text-md mb-4">
-      See all deal, new customer, new chat, and summary report
-    </p>
-    <div class="">
-      <p class="text-lg font-semibold mb-4">{{ currentDate }}</p>
-      <p class="text-md mb-4">
-        See all deal, new customer, new chat, and summary report
-      </p>
-    </div>
-    <div class="grid grid-cols-5 gap-4 mb-6">
-      <div class="bg-white p-4 rounded shadow text-center border">
-        <p class="text-gray-500">Total</p>
-        <h3 class="text-2xl font-bold">{{ summary.total }}</h3>
-        <p class="text-gray-500">New Customer</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow text-center border">
-        <p class="text-gray-500">Progress</p>
-        <h3 class="text-2xl font-bold">{{ summary.onProgress }}</h3>
-        <p class="text-gray-500">On Progress</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow text-center border">
-        <p class="text-gray-500">Progress</p>
-        <h3 class="text-2xl font-bold">{{ summary.deal }}</h3>
-        <p class="text-gray-500">Deal</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow text-center border">
-        <p class="text-gray-500">Progress</p>
-        <h3 class="text-2xl font-bold">{{ summary.canceled }}</h3>
-        <p class="text-gray-500">Canceled</p>
-      </div>
-      <div
-        class="bg-white p-4 rounded shadow text-center flex flex-col items-center justify-center border"
-      >
-        <p class="text-gray-500">Today`s Report</p>
-        <button
-          @click="downloadCsv"
-          class="text-gray-500 hover:text-gray-600 underline"
-        >
-          Download CSV
-        </button>
-      </div>
-    </div>
+<style scoped>
+.hidden-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
 
-    <div class="mb-4 flex flex-wrap gap-2 items-end">
-      <input
-        v-model="searchKeyword"
-        type="text"
-        placeholder="Search..."
-        class="input"
-      />
-      <input v-model="filterDate" type="date" class="input" />
+.hidden-scroll::-webkit-scrollbar {
+  display: none;
+}
 
-      <select v-model="filterProgress" class="input">
-        <option value="all">All Progress</option>
-        <option value="on progress">On Progress</option>
-        <option value="deal">Deal</option>
-        <option value="canceled">Canceled</option>
-      </select>
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.15s ease;
+}
 
-      <select v-model="selectedSegmen" class="input">
-        <option value="all">All Segmen</option>
-        <option
-          v-for="segment in uniqueSegmens"
-          :key="segment"
-          :value="segment"
-        >
-          {{ segment }}
-        </option>
-      </select>
-
-      <button
-        @click="resetFilters"
-        class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
-      >
-        Reset Filters
-      </button>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="min-w-full bg-white border rounded-lg shadow">
-        <thead class="bg-cyan-600 text-white">
-          <tr>
-            <th class="px-4 py-2">Date</th>
-            <th class="px-4 py-2">Phone</th>
-            <th class="px-4 py-2">Name</th>
-            <th class="px-4 py-2">Progress</th>
-            <th class="px-4 py-2">PIC</th>
-            <th class="px-4 py-2">Segmen</th>
-            <th class="px-4 py-2">Via</th>
-            <th class="px-4 py-2">Country</th>
-            <th class="px-4 py-2">SM ID</th>
-            <th class="px-4 py-2">Tour Packages</th>
-            <th class="px-4 py-2">Check In</th>
-            <th class="px-4 py-2">Check Out</th>
-            <th class="px-4 py-2">Hotel</th>
-            <th class="px-4 py-2">Notes</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr
-            v-for="c in filteredCustomers"
-            :key="c.id"
-            class="border-b hover:bg-gray-50"
-          >
-            <td class="px-4 py-2">{{ c.date }}</td>
-            <td class="px-4 py-2">{{ c.phone }}</td>
-            <td class="px-4 py-2">{{ c.name }}</td>
-            <td class="px-4 py-2">{{ c.progress }}</td>
-            <td class="px-4 py-2">{{ c.pic }}</td>
-            <td class="px-4 py-2">{{ c.segmen }}</td>
-            <td class="px-4 py-2">{{ c.via }}</td>
-            <td class="px-4 py-2">{{ c.country }}</td>
-            <td class="px-4 py-2">{{ c.social_media_id }}</td>
-            <td class="px-4 py-2">{{ c.tour_packages }}</td>
-            <td class="px-4 py-2">{{ c.check_in }}</td>
-            <td class="px-4 py-2">{{ c.check_out }}</td>
-            <td class="px-4 py-2">{{ c.hotel }}</td>
-            <td class="px-4 py-2">{{ c.notes }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</template> -->
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>

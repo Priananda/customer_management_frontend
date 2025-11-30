@@ -1,4 +1,13 @@
 <script setup>
+import {
+  Search,
+  Calendar,
+  Filter,
+  ChevronDown,
+  Pencil,
+  Trash2,
+  RotateCcw,
+} from "lucide-vue-next";
 import { ref, computed, onMounted } from "vue";
 import api from "../api/api";
 
@@ -10,6 +19,29 @@ const searchKeyword = ref("");
 const filterDate = ref("");
 const filterProgress = ref("all");
 const selectedSegmen = ref("all");
+
+// Indikator laoding button save
+const isLoading = ref(false);
+
+// dropdown state
+const showProgressDropdown = ref(false);
+const showSegmenDropdown = ref(false);
+
+// dropdown select customer
+const showCustomerDropdown = ref(false);
+const selectedCustomerText = ref("");
+
+// Batal edit
+const isEditing = ref(false);
+const originalDealData = ref(null);
+
+// alert button save dan edit
+const alertMessage = ref("");
+const alertType = ref("");
+const showAlert = ref(false);
+
+// loading tabel
+const loading = ref(false);
 
 const dealForm = ref({
   id: null,
@@ -23,11 +55,26 @@ const dealForm = ref({
 
 // Fetch Data API
 const loadData = async () => {
-  const nc = await api.get("/new-customer");
-  newCustomers.value = nc.data.data;
+  try {
+    // Fetch New Customers tanpa loading
+    const nc = await api.get("/new-customer");
+    newCustomers.value = nc.data.data || [];
 
-  const dc = await api.get("/deal-customer");
-  deals.value = dc.data.data;
+    // Fetch Deal Customers dengan loading
+    loading.value = true;
+    try {
+      const dc = await api.get("/deal-customer");
+      deals.value = dc.data.data || [];
+    } catch (err) {
+      console.error("Error fetching deal customers:", err);
+      deals.value = [];
+    } finally {
+      loading.value = false;
+    }
+  } catch (err) {
+    console.error("Error fetching new customers:", err);
+    newCustomers.value = [];
+  }
 };
 
 // Fungsi ketika pilih PIC
@@ -40,21 +87,35 @@ const onSelectCustomer = () => {
 // Submit Form
 const saveDeal = async () => {
   const fd = new FormData();
+  isLoading.value = true;
 
   Object.keys(dealForm.value).forEach((key) => {
     if (key === "payment_status" && dealForm.value[key] === null) return;
-
     fd.append(key, dealForm.value[key]);
   });
 
-  if (!dealForm.value.id) {
-    await api.post("/deal-customer", fd, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-  } else {
-    await api.post(`/deal-customer/${dealForm.value.id}?_method=PUT`, fd, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+  try {
+    if (!dealForm.value.id) {
+      await api.post("/deal-customer", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    } else {
+      await api.post(`/deal-customer/${dealForm.value.id}?_method=PUT`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    }
+
+    // sukses
+    alertType.value = "success";
+    alertMessage.value = "Data berhasil disimpan!";
+    showAlert.value = true;
+  } catch (error) {
+    // error
+    alertType.value = "error";
+    alertMessage.value = "Terjadi kesalahan. Gagal menyimpan data!";
+    showAlert.value = true;
+  } finally {
+    isLoading.value = false;
   }
 
   reset();
@@ -63,6 +124,10 @@ const saveDeal = async () => {
 
 // Edit
 const editDeal = (d) => {
+  // Simpan original sebelum diedit
+  originalDealData.value = JSON.parse(JSON.stringify(d));
+
+  // Set form untuk mode edit
   dealForm.value = {
     id: d.id,
     new_customer_id: d.new_customer_id,
@@ -72,7 +137,11 @@ const editDeal = (d) => {
     activity: d.activity,
     payment_status: null,
   };
+
   selectedCustomer.value = d.new_customer;
+  selectedCustomerText.value = `${d.new_customer.name} — (${d.new_customer.phone})`;
+
+  isEditing.value = true;
 };
 
 // Delete
@@ -222,192 +291,613 @@ const resetFilters = () => {
   filterProgress.value = "all";
   selectedSegmen.value = "all";
 };
+
+// buka hanya progress, tutup yang lain
+const openOnlyProgress = () => {
+  showProgressDropdown.value = !showProgressDropdown.value;
+  showSegmenDropdown.value = false;
+};
+
+// buka hanya segmen, tutup yang lain
+const openOnlySegmen = () => {
+  showSegmenDropdown.value = !showSegmenDropdown.value;
+  showProgressDropdown.value = false;
+};
+// tutup semua dropdown saat klik field lain
+const closeAllDropdowns = () => {
+  showProgressDropdown.value = false;
+  showSegmenDropdown.value = false;
+};
+
+// select progress
+const selectProgress = (val) => {
+  filterProgress.value = val;
+  showProgressDropdown.value = false;
+};
+// select segmen
+const selectSegmen = (val) => {
+  selectedSegmen.value = val;
+  showSegmenDropdown.value = false;
+};
+
+// close jika klik luar
+onMounted(() => {
+  window.addEventListener("click", () => {
+    closeAllDropdowns();
+  });
+});
+
+const progressClass = (status) => {
+  if (!status) return "bg-slate-100 text-slate-600";
+
+  const s = status.toString().trim().toUpperCase();
+
+  switch (s) {
+    case "NEW":
+      return "bg-slate-200 text-slate-700";
+
+    case "FOLLOW UP":
+    case "FOLLOWUP":
+      return "bg-yellow-200 text-yellow-800";
+
+    case "PROSPECT":
+      return "bg-blue-200 text-blue-800";
+
+    case "DEAL":
+      return "bg-green-200 text-green-800";
+
+    case "LOST":
+    case "CANCELED":
+      return "bg-red-200 text-red-800";
+
+    case "ON PROGRESS":
+      return "bg-blue-200 text-blue-800";
+
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+};
+
+// buka/tutup dropdown
+const toggleCustomerDropdown = () => {
+  closeAllDropdowns();
+  showCustomerDropdown.value = !showCustomerDropdown.value;
+};
+// pilih customer
+const selectCustomer = (cust) => {
+  if (!cust) {
+    dealForm.value.new_customer_id = "";
+    selectedCustomerText.value = "";
+  } else {
+    dealForm.value.new_customer_id = cust.id;
+    selectedCustomerText.value = `${cust.name} — (${cust.phone})`;
+    onSelectCustomer(); // fungsi existing kamu
+  }
+
+  showCustomerDropdown.value = false;
+};
+
+const cancelEdit = () => {
+  if (originalDealData.value) {
+    dealForm.value = {
+      id: originalDealData.value.id,
+      new_customer_id: originalDealData.value.new_customer_id,
+      handler: originalDealData.value.handler,
+      link_drive: originalDealData.value.link_drive,
+      total_pax: originalDealData.value.total_pax,
+      activity: originalDealData.value.activity,
+      payment_status: null,
+    };
+
+    selectedCustomer.value = originalDealData.value.new_customer;
+    selectedCustomerText.value = `${originalDealData.value.new_customer.name} — (${originalDealData.value.new_customer.phone})`;
+  }
+  reset();
+  isEditing.value = false;
+  originalDealData.value = null;
+};
 </script>
 
 <template>
-  <div class="p-4">
-    <h2 class="text-xl font-bold mb-4">Deal Customers</h2>
-
-    <div class="border p-4 bg-white shadow mb-6">
-      <h3 class="font-semibold mb-3">Form Deal Customer</h3>
-
-      <select
-        v-model="dealForm.new_customer_id"
-        @change="onSelectCustomer"
-        class="border p-2 w-full mb-2"
+  <div class="p-5 mx-auto max-w-6xl">
+    <transition
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-active-class="transition-all duration-300"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-active-class="transition-all duration-300"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="showAlert"
+        :class="
+          alertType === 'success'
+            ? 'bg-blue-900 text-white'
+            : 'bg-red-600 text-white'
+        "
+        class="fixed top-12 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-lg text-sm font-medium z-50"
       >
-        <option value="">Pilih Customer...</option>
-        <option v-for="nc in newCustomers" :key="nc.id" :value="nc.id">
-          {{ nc.name }}
-        </option>
-      </select>
+        {{ alertMessage }}
+      </div>
+    </transition>
 
-      <div v-if="selectedCustomer" class="mb-3 p-3 bg-gray-100 border rounded">
-        <p><b>PIC:</b> {{ selectedCustomer.pic }}</p>
-        <p><b>Date:</b> {{ selectedCustomer.date }}</p>
-        <p><b>Phone:</b> {{ selectedCustomer.phone }}</p>
-        <p><b>Guest Name:</b> {{ selectedCustomer.name }}</p>
-        <p><b>Progress:</b> {{ selectedCustomer.progress }}</p>
-        <p><b>Segmen:</b> {{ selectedCustomer.segmen }}</p>
-        <p><b>Country:</b> {{ selectedCustomer.country }}</p>
-        <p><b>Tour Packages:</b> {{ selectedCustomer.tour_packages }}</p>
-        <p><b>Check In:</b> {{ selectedCustomer.check_in }}</p>
-        <p><b>Check Out:</b> {{ selectedCustomer.check_out }}</p>
-        <p><b>Hotel:</b> {{ selectedCustomer.hotel }}</p>
+    <!-- TITLE -->
+    <h2
+      class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
+    >
+      Deal Customer
+    </h2>
+    <p class="text-md mb-6 text-slate-600">
+      See all deal customer, and summary report
+    </p>
+    <!-- ===== FORM DEAL CUSTOMER ===== -->
+    <div class="bg-white rounded-xl shadow border border-slate-200 p-6 mb-8">
+      <h3 class="text-lg font-semibold mb-4 text-slate-700">
+        Form Deal Customer
+      </h3>
+
+      <!-- Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
+        <!-- Select Customer -->
+        <div class="col-span-2 relative" id="customer-dropdown">
+          <label class="font-semibold text-slate-700">Select Customer</label>
+
+          <!-- Button -->
+          <button
+            @click.stop="toggleCustomerDropdown"
+            class="mt-1 w-full bg-white/80 backdrop-blur-xl border border-slate-300 rounded-lg px-4 py-3 flex items-center justify-between hover:shadow-md transition-all"
+          >
+            <span class="text-slate-700 font-medium">
+              {{ selectedCustomerText || "Pilih Customer..." }}
+            </span>
+            <ChevronDown class="w-5 h-5 text-slate-500" />
+          </button>
+
+          <!-- Dropdown -->
+          <transition name="dropdown">
+            <div
+              v-if="showCustomerDropdown"
+              class="absolute z-50 mt-1 w-full bg-white backdrop-blur-xl border border-slate-200 rounded-lg shadow-md max-h-60 overflow-y-auto"
+            >
+              <div
+                v-for="nc in newCustomers"
+                :key="nc.id"
+                class="px-4 py-3 hover:bg-blue-50 cursor-pointer flex justify-between text-slate-700"
+                @click="selectCustomer(nc)"
+              >
+                <span class="font-medium">{{ nc.name }}</span>
+                <span class="text-slate-400 text-sm">({{ nc.phone }})</span>
+              </div>
+            </div>
+          </transition>
+        </div>
+
+        <!-- Customer Preview -->
+        <div
+          v-if="selectedCustomer"
+          class="col-span-2 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-md text-sm shadow"
+        >
+          <h4 class="font-semibold text-slate-800 mb-3 text-lg">
+            Customer Details
+          </h4>
+
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-slate-700">
+            <p><b class="font-semibold">PIC:</b> {{ selectedCustomer.pic }}</p>
+            <p>
+              <b class="font-semibold">Date:</b> {{ selectedCustomer.date }}
+            </p>
+            <p>
+              <b class="font-semibold">Phone:</b> {{ selectedCustomer.phone }}
+            </p>
+            <p>
+              <b class="font-semibold">Guest:</b> {{ selectedCustomer.name }}
+            </p>
+            <p>
+              <b class="font-semibold">Progress:</b>
+              {{ selectedCustomer.progress }}
+            </p>
+            <p>
+              <b class="font-semibold">Segmen:</b> {{ selectedCustomer.segmen }}
+            </p>
+            <p>
+              <b class="font-semibold">Country:</b>
+              {{ selectedCustomer.country }}
+            </p>
+            <p>
+              <b class="font-semibold">Packages:</b>
+              {{ selectedCustomer.tour_packages }}
+            </p>
+            <p>
+              <b class="font-semibold">Check In:</b>
+              {{ selectedCustomer.check_in }}
+            </p>
+            <p>
+              <b class="font-semibold">Check Out:</b>
+              {{ selectedCustomer.check_out }}
+            </p>
+            <p>
+              <b class="font-semibold">Hotel:</b> {{ selectedCustomer.hotel }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Form Input -->
+        <div>
+          <label class="font-semibold text-slate-700">Handler</label>
+          <input
+            v-model="dealForm.handler"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Handler"
+          />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-700">Link Drive</label>
+          <input
+            v-model="dealForm.link_drive"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Link Drive"
+          />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-700">Total Pax</label>
+          <input
+            v-model="dealForm.total_pax"
+            type="number"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Total Pax"
+          />
+        </div>
+
+        <div>
+          <label class="font-semibold text-slate-700">Activity</label>
+          <input
+            v-model="dealForm.activity"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Activity"
+          />
+        </div>
+
+        <!-- Payment Status -->
+        <div class="col-span-2">
+          <label class="font-semibold text-slate-700"
+            >Payment Status (Upload)</label
+          >
+          <input
+            type="file"
+            @change="(e) => (dealForm.payment_status = e.target.files[0])"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+          />
+        </div>
       </div>
 
-      <input
-        v-model="dealForm.handler"
-        class="border p-2 w-full mb-2"
-        placeholder="Handler"
-      />
-      <input
-        v-model="dealForm.link_drive"
-        class="border p-2 w-full mb-2"
-        placeholder="Link Drive"
-      />
-      <input
-        v-model="dealForm.total_pax"
-        type="number"
-        class="border p-2 w-full mb-2"
-        placeholder="Total Pax"
-      />
-      <input
-        v-model="dealForm.activity"
-        class="border p-2 w-full mb-2"
-        placeholder="Activity"
-      />
+      <!-- Save Button -->
+      <div class="text-[15px] flex gap-2 justify-end mt-4">
+        <button
+          @click="saveDeal"
+          :disabled="isLoading"
+          class="px-4 py-2 bg-blue-900 text-white rounded-lg flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <!-- Spinner -->
+          <svg
+            v-if="isLoading"
+            class="w-5 h-5 animate-spin text-white"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+            ></path>
+          </svg>
 
-      <input
-        type="file"
-        @change="(e) => (dealForm.payment_status = e.target.files[0])"
-        class="border p-2 w-full mb-2"
-      />
+          <!-- Text -->
+          {{ isLoading ? "Memproses..." : isEditing ? "Update" : "Save" }}
+        </button>
 
-      <button
-        @click="saveDeal"
-        class="mt-3 bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        Save Deal
-      </button>
+        <!-- Tombol Batal Edit (hanya muncul saat edit) -->
+        <button
+          v-if="isEditing"
+          @click="cancelEdit"
+          class="px-4 py-2 bg-gray-500 text-white rounded-lg"
+        >
+          Batal Edit
+        </button>
+      </div>
     </div>
 
-    <div class="mb-4 flex flex-wrap gap-2 items-end">
+    <!-- ===== FILTER BAR ===== -->
+    <div
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+    >
       <!-- Search -->
-      <div>
+      <div class="relative">
+        <Search class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
         <input
           v-model="searchKeyword"
+          @focus="closeAllDropdowns()"
           type="text"
-          placeholder="Search..."
-          class="input"
+          placeholder="Search"
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
-      <!-- Filter Date -->
-      <div>
-        <input v-model="filterDate" type="date" class="input" />
+      <!-- Date -->
+      <div class="relative">
+        <Calendar class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+        <input
+          v-model="filterDate"
+          @focus="closeAllDropdowns()"
+          type="date"
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+        />
       </div>
 
-      <!-- Filter Progress -->
-      <div>
-        <select v-model="filterProgress" class="input">
-          <option value="all">All Progress</option>
-          <option value="on progress">On Progress</option>
-          <option value="deal">Deal</option>
-          <option value="canceled">Canceled</option>
-        </select>
-      </div>
+      <!-- Progress Dropdown -->
+      <div class="relative" id="progress-dropdown">
+        <button
+          @click.stop="openOnlyProgress()"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <Filter class="w-4 h-4 text-slate-500" />
+            <span class="text-slate-700 capitalize">
+              {{ filterProgress === "all" ? "All Progress" : filterProgress }}
+            </span>
+          </div>
+          <ChevronDown class="w-4 h-4 text-slate-500" />
+        </button>
 
-      <!-- Filter Segmen -->
-      <div>
-        <select v-model="selectedSegmen" class="input">
-          <option value="all">All Segmen</option>
-          <option
-            v-for="segment in uniqueSegmens"
-            :key="segment"
-            :value="segment"
+        <transition name="dropdown">
+          <div
+            v-if="showProgressDropdown"
+            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            {{ segment }}
-          </option>
-        </select>
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="selectProgress('all')"
+            >
+              All Progress
+            </div>
+
+            <div
+              v-for="prog in ['on progress', 'deal', 'canceled']"
+              :key="prog"
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              @click="selectProgress(prog)"
+            >
+              {{ prog }}
+            </div>
+          </div>
+        </transition>
       </div>
 
-      <!-- Download CSV -->
-      <div>
+      <!-- Segmen Dropdown -->
+      <div class="relative" id="segmen-dropdown">
+        <button
+          @click.stop="openOnlySegmen()"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <Filter class="w-4 h-4 text-slate-500" />
+            <span class="text-slate-700 capitalize">
+              {{ selectedSegmen === "all" ? "All Segmen" : selectedSegmen }}
+            </span>
+          </div>
+          <ChevronDown class="w-4 h-4 text-slate-500" />
+        </button>
+
+        <transition name="dropdown">
+          <div
+            v-if="showSegmenDropdown"
+            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          >
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="selectSegmen('all')"
+            >
+              All Segmen
+            </div>
+
+            <div
+              v-for="segment in uniqueSegmens"
+              :key="segment"
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              @click="selectSegmen(segment)"
+            >
+              {{ segment }}
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <!-- Add Customer -->
+      <div class="flex items-center gap-2">
+        <button
+          @click="openCreateModal"
+          class="w-full bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 rounded-lg"
+        >
+          Add Customer
+        </button>
+      </div>
+
+      <div class="lg:col-span-5 flex gap-2 justify-end">
         <button
           @click="downloadCSV"
-          class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
         >
           Download CSV
         </button>
         <button
           @click="resetFilters"
-          class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
+          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow"
         >
-          Reset Filters
+          <RotateCcw class="w-4 h-4" />
+          Reset
         </button>
       </div>
     </div>
 
-    <table class="w-full border bg-white shadow">
-      <thead class="bg-blue-600 text-white">
-        <tr>
-          <th class="p-2">Customer Name</th>
-          <th class="p-2">PIC</th>
-          <th class="p-2">Date</th>
-          <th class="p-2">Phone</th>
-          <th class="p-2">Progress</th>
-          <th class="p-2">Segmen</th>
-          <th class="p-2">Country</th>
-          <th class="p-2">Tour Packages</th>
-          <th class="p-2">Check In</th>
-          <th class="p-2">Check Out</th>
-          <th class="p-2">Hotel</th>
+    <!-- ===== TABLE ===== -->
+    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
+      <table
+        class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
+      >
+        <thead class="bg-blue-900 text-white">
+          <tr>
+            <th class="px-4 py-3 text-left w-[12%]">Customer</th>
+            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
+            <th class="px-4 py-3 text-left w-[10%]">Date</th>
+            <th class="px-4 py-3 text-left w-[10%]">Phone</th>
+            <th class="px-4 py-3 text-left w-[10%]">Progress</th>
+            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
+            <th class="px-4 py-3 text-left w-[8%]">Country</th>
+            <th class="px-4 py-3 text-left w-[12%]">Packages</th>
+            <th class="px-4 py-3 text-left w-[8%]">Check In</th>
+            <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
+            <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
+            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
+            <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
+            <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
+            <th class="px-4 py-3 text-left w-[10%]">Activity</th>
+            <th class="px-4 py-3 text-left w-[10%]">Payment</th>
+            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
+          </tr>
+        </thead>
 
-          <th class="p-2">Handler</th>
-          <th class="p-2">Link Drive</th>
-          <th class="p-2">Total Pax</th>
-          <th class="p-2">Activity</th>
-          <th class="p-2">Payment Status</th>
-          <th class="p-2">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="d in filteredDeals" :key="d.id">
-          <td class="p-2">{{ d.new_customer?.name }}</td>
-          <td class="p-2">{{ d.new_customer?.pic }}</td>
-          <td class="p-2">{{ d.new_customer?.date }}</td>
-          <td class="p-2">{{ d.new_customer?.phone }}</td>
-          <td class="p-2">{{ d.new_customer?.progress }}</td>
-          <td class="p-2">{{ d.new_customer?.segmen }}</td>
-          <td class="p-2">{{ d.new_customer?.country }}</td>
-          <td class="p-2">{{ d.new_customer?.tour_packages }}</td>
-          <td class="p-2">{{ d.new_customer?.check_in }}</td>
-          <td class="p-2">{{ d.new_customer?.check_out }}</td>
-          <td class="p-2">{{ d.new_customer?.hotel }}</td>
-
-          <td class="p-2">{{ d.handler }}</td>
-          <td class="p-2">{{ d.link_drive }}</td>
-          <td class="p-2">{{ d.total_pax }}</td>
-          <td class="p-2">{{ d.activity }}</td>
-          <td class="p-2">{{ d.payment_status }}</td>
-
-          <td class="p-2">
-            <button
-              @click="editDeal(d)"
-              class="px-2 py-1 bg-yellow-500 rounded"
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="15" class="text-center p-4">Loading...</td>
+          </tr>
+          <tr v-else-if="!loading && filteredDeals.length === 0">
+            <td
+              colspan="15"
+              class="text-center p-4 text-gray-800 font-semibold"
             >
-              Edit
-            </button>
-            <button
-              @click="deleteDeal(d.id)"
-              class="px-2 py-1 bg-red-600 text-white rounded"
-            >
-              Delete
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+              Data tidak ditemukan
+            </td>
+          </tr>
+          <tr
+            v-for="d in filteredDeals"
+            :key="d.id"
+            class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
+          >
+            <!-- Customer -->
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ d.new_customer?.name }}
+            </td>
+
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.pic }}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.date }}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.phone }}
+            </td>
+
+            <!-- Progress badge -->
+            <td class="px-4 py-3">
+              <span
+                :class="[
+                  'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-28',
+                  progressClass(d.new_customer?.progress),
+                ]"
+              >
+                {{ d.new_customer?.progress }}
+              </span>
+            </td>
+
+            <td class="px-4 py-3">{{ d.new_customer?.segmen }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.country }}
+            </td>
+            <td class="px-4 py-3">{{ d.new_customer?.tour_packages }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.check_in }}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.check_out }}
+            </td>
+
+            <td class="px-4 py-3">{{ d.new_customer?.hotel }}</td>
+            <td class="px-4 py-3">{{ d.handler }}</td>
+            <td class="px-4 py-3">{{ d.link_drive }}</td>
+            <td class="px-4 py-3">{{ d.total_pax }}</td>
+            <td class="px-4 py-3">{{ d.activity }}</td>
+            <td class="px-4 py-3">{{ d.payment_status }}</td>
+
+            <!-- ACTIONS (Icons) -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <!-- Edit -->
+                <button
+                  @click="editDeal(d)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Pencil class="w-4 h-4 text-orange-500" />
+                </button>
+
+                <!-- Delete -->
+                <button
+                  @click="deleteDeal(d.id)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Trash2 class="w-4 h-4 text-red-600" />
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.hidden-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hidden-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.15s ease;
+}
+
+.dropdown-enter-from {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.dropdown-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dropdown-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>

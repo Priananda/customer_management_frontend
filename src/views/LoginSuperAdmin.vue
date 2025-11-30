@@ -2,10 +2,10 @@
 import { Eye, EyeOff } from "lucide-vue-next";
 import LoadingSpinner from "../components/Loading.vue";
 import { ref, onMounted } from "vue";
-import api from "../api/api";
-import { useRouter } from "vue-router";
+import { useAuthStore } from "../stores/auth";
 
-const router = useRouter();
+const auth = useAuthStore();
+
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -15,6 +15,7 @@ const modalMsg = ref("");
 const modalType = ref("");
 const showModal = ref(false);
 const loading = ref(false);
+
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 onMounted(() => {
@@ -28,14 +29,13 @@ onMounted(() => {
 });
 
 const login = async () => {
-  loading.value = true; // start
+  loading.value = true;
 
   emailError.value = "";
   passwordError.value = "";
   modalMsg.value = "";
   modalType.value = "";
 
-  // Validasi input
   if (!email.value) emailError.value = "Email wajib diisi!";
   else if (!validateEmail(email.value)) emailError.value = "Email tidak valid!";
 
@@ -45,42 +45,27 @@ const login = async () => {
     modalMsg.value = "Tolong periksa input Anda!";
     modalType.value = "error";
     showModal.value = true;
+    loading.value = false;
     return;
   }
 
   try {
-    const res = await api.post("/login", {
+    await auth.login({
       email: email.value,
       password: password.value,
     });
 
-    loading.value = false; // Stop
-
-    const role = res.data.user.role;
-    if (role !== "super_admin") {
-      passwordError.value = "Hanya Super Admin yang bisa login di halaman ini";
-      modalMsg.value = "Login gagal!";
-      modalType.value = "error";
-      showModal.value = true;
-      return;
-    }
-
-    localStorage.setItem("access_token", res.data.access_token);
-    localStorage.setItem("refresh_token", res.data.refresh_token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
-
     modalMsg.value = "Berhasil! Mohon tunggu sebentar...";
     modalType.value = "success";
     showModal.value = true;
-
-    setTimeout(() => {
-      showModal.value = false;
-      router.push("/dashboard/home");
-    }, 1500);
   } catch (err) {
-    modalMsg.value = err.response?.data?.message || "Login gagal";
+    modalMsg.value = "Harap masukan email dan password dengan benar";
+    console.error(err.response?.data?.message || err.message);
+
     modalType.value = "error";
     showModal.value = true;
+  } finally {
+    loading.value = false;
   }
 };
 </script>
@@ -101,7 +86,7 @@ const login = async () => {
               :class="modalType === 'error' ? 'text-black' : 'text-black'"
               class="text-lg font-semibold mb-3"
             >
-              {{ modalType === "error" ? "Gagal" : "Berhasil" }}
+              {{ modalType === "error" ? "Login Gagal" : "Login Berhasil" }}
             </h3>
             <p class="text-gray-700 mb-5">{{ modalMsg }}</p>
             <button
@@ -172,9 +157,10 @@ const login = async () => {
 
       <button
         @click="login"
-        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300"
+        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300 flex items-center justify-center gap-2"
+        :disabled="loading"
       >
-        Login
+        <span>{{ loading ? "Memproses..." : "Login" }}</span>
       </button>
     </div>
   </div>

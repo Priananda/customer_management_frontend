@@ -1,16 +1,26 @@
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, onBeforeUnmount } from "vue";
+import {
+  Search,
+  Calendar,
+  Filter,
+  ChevronDown,
+  RotateCcw,
+} from "lucide-vue-next";
 import api from "../api/api";
 
-// Data
 const dataPIC = ref([]);
 const loading = ref(true);
 
-// Filter & Search state
+// Filters
 const searchKeyword = ref("");
 const filterDate = ref("");
 const filterProgress = ref("all");
 const selectedSegmen = ref("all");
+
+// Dropdown visibility
+const showProgressDropdown = ref(false);
+const showSegmenDropdown = ref(false);
 
 // Load data
 onMounted(async () => {
@@ -27,49 +37,48 @@ onMounted(async () => {
 // Filtered data
 const filteredPIC = computed(() => {
   return dataPIC.value.filter((c) => {
-    const keyword = searchKeyword.value.toLowerCase();
+    const keyword = (searchKeyword.value || "").toLowerCase();
     const matchesKeyword =
-      c.date.toLowerCase().includes(keyword) ||
-      c.phone.toLowerCase().includes(keyword) ||
-      c.name.toLowerCase().includes(keyword) ||
-      c.progress.toLowerCase().includes(keyword) ||
-      c.pic.toLowerCase().includes(keyword) ||
-      c.segmen.toLowerCase().includes(keyword) ||
-      c.via.toLowerCase().includes(keyword) ||
-      c.country.toLowerCase().includes(keyword) ||
-      c.social_media_id.toLowerCase().includes(keyword) ||
-      c.tour_packages.toLowerCase().includes(keyword) ||
-      c.check_in.toLowerCase().includes(keyword) ||
-      c.check_out.toLowerCase().includes(keyword) ||
-      c.hotel.toLowerCase().includes(keyword) ||
-      c.notes.toLowerCase().includes(keyword);
+      (c.date || "").toLowerCase().includes(keyword) ||
+      (c.phone || "").toLowerCase().includes(keyword) ||
+      (c.name || "").toLowerCase().includes(keyword) ||
+      (c.progress || "").toLowerCase().includes(keyword) ||
+      (c.pic || "").toLowerCase().includes(keyword) ||
+      (c.segmen || "").toLowerCase().includes(keyword) ||
+      (c.via || "").toLowerCase().includes(keyword) ||
+      (c.country || "").toLowerCase().includes(keyword) ||
+      (c.social_media_id || "").toLowerCase().includes(keyword) ||
+      (c.tour_packages || "").toLowerCase().includes(keyword) ||
+      (c.check_in || "").toLowerCase().includes(keyword) ||
+      (c.check_out || "").toLowerCase().includes(keyword) ||
+      (c.hotel || "").toLowerCase().includes(keyword) ||
+      (c.notes || "").toLowerCase().includes(keyword);
 
     const matchesDate = filterDate.value ? c.date === filterDate.value : true;
-
     const matchesProgress =
       filterProgress.value && filterProgress.value !== "all"
-        ? c.progress.toLowerCase() === filterProgress.value.toLowerCase()
+        ? (c.progress || "").toLowerCase() ===
+          filterProgress.value.toLowerCase()
         : true;
-
     const matchesSegmen =
       selectedSegmen.value && selectedSegmen.value !== "all"
-        ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
+        ? (c.segmen || "").toLowerCase() === selectedSegmen.value.toLowerCase()
         : true;
 
     return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
   });
 });
 
-// Unique Segmen untuk filter
+// Unique Segmen
 const uniqueSegmens = computed(() => {
-  const segmens = new Set();
+  const seg = new Set();
   dataPIC.value.forEach((c) => {
-    if (c.segmen) segmens.add(c.segmen);
+    if (c.segmen) seg.add(c.segmen);
   });
-  return Array.from(segmens);
+  return Array.from(seg);
 });
 
-// Download CSV
+// CSV
 const downloadCSV = () => {
   const headers = [
     "Date",
@@ -87,7 +96,6 @@ const downloadCSV = () => {
     "Hotel",
     "Notes",
   ];
-
   const rows = filteredPIC.value.map((c) => [
     c.date,
     c.phone,
@@ -104,14 +112,11 @@ const downloadCSV = () => {
     c.hotel,
     c.notes,
   ]);
-
   const csvContent =
     "data:text/csv;charset=utf-8," +
     [headers, ...rows].map((e) => e.join(",")).join("\n");
-
-  const encodedUri = encodeURI(csvContent);
   const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
+  link.href = encodeURI(csvContent);
   link.setAttribute("download", "data_pic.csv");
   document.body.appendChild(link);
   link.click();
@@ -125,93 +130,238 @@ const resetFilters = () => {
   filterProgress.value = "all";
   selectedSegmen.value = "all";
 };
+
+// Close dropdowns on click outside
+function handleClickOutside(e) {
+  const progress = document.getElementById("progress-dropdown");
+  const segmen = document.getElementById("segmen-dropdown");
+  if (progress && !progress.contains(e.target))
+    showProgressDropdown.value = false;
+  if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
+}
+
+onMounted(() => document.addEventListener("click", handleClickOutside));
+onBeforeUnmount(() =>
+  document.removeEventListener("click", handleClickOutside)
+);
+
+const progressOptions = ["on progress", "deal", "canceled"];
+function selectProgress(val) {
+  filterProgress.value = val;
+  showProgressDropdown.value = false;
+}
+function selectSegmen(val) {
+  selectedSegmen.value = val;
+  showSegmenDropdown.value = false;
+}
 </script>
 
 <template>
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">Data PIC</h1>
+  <div class="p-5 max-w-6xl mx-auto">
+    <!-- TITLE -->
+    <h2
+      class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
+    >
+      Data PIC
+    </h2>
+    <p class="text-md mb-6 text-slate-600">Manage new customers efficiently.</p>
 
-    <!-- Search & Filters -->
-    <div class="mb-4 flex flex-wrap gap-2 items-end">
-      <input
-        v-model="searchKeyword"
-        type="text"
-        placeholder="Search..."
-        class="input"
-      />
-      <input v-model="filterDate" type="date" class="input" />
-      <select v-model="filterProgress" class="input">
-        <option value="all">All Progress</option>
-        <option value="on progress">On Progress</option>
-        <option value="deal">Deal</option>
-        <option value="canceled">Canceled</option>
-      </select>
-      <select v-model="selectedSegmen" class="input">
-        <option value="all">All Segmen</option>
-        <option
-          v-for="segment in uniqueSegmens"
-          :key="segment"
-          :value="segment"
+    <!-- FILTERS -->
+    <div
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+    >
+      <!-- Search -->
+      <div class="relative">
+        <Search class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="Search..."
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+        />
+      </div>
+
+      <!-- Date -->
+      <div class="relative">
+        <Calendar class="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+        <input
+          v-model="filterDate"
+          type="date"
+          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+        />
+      </div>
+
+      <!-- Progress dropdown -->
+      <div class="relative" id="progress-dropdown">
+        <button
+          @click.stop="showProgressDropdown = !showProgressDropdown"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
-          {{ segment }}
-        </option>
-      </select>
+          <div class="flex items-center gap-2">
+            <Filter class="w-4 h-4 text-slate-500" />
+            <span class="text-slate-700 capitalize">
+              {{ filterProgress === "all" ? "All Progress" : filterProgress }}
+            </span>
+          </div>
+          <ChevronDown class="w-4 h-4 text-slate-500" />
+        </button>
+        <transition name="dropdown">
+          <div
+            v-if="showProgressDropdown"
+            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          >
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="selectProgress('all')"
+            >
+              All Progress
+            </div>
+            <div
+              v-for="p in progressOptions"
+              :key="p"
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              @click="selectProgress(p)"
+            >
+              {{ p }}
+            </div>
+          </div>
+        </transition>
+      </div>
 
-      <button
-        @click="downloadCSV"
-        class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
-      >
-        Download CSV
-      </button>
-      <button
-        @click="resetFilters"
-        class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded"
-      >
-        Reset Filters
-      </button>
+      <!-- Segmen dropdown -->
+      <div class="relative" id="segmen-dropdown">
+        <button
+          @click.stop="showSegmenDropdown = !showSegmenDropdown"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <Filter class="w-4 h-4 text-slate-500" />
+            <span class="text-slate-700 capitalize">
+              {{ selectedSegmen === "all" ? "All Segmen" : selectedSegmen }}
+            </span>
+          </div>
+          <ChevronDown class="w-4 h-4 text-slate-500" />
+        </button>
+        <transition name="dropdown">
+          <div
+            v-if="showSegmenDropdown"
+            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          >
+            <div
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              @click="selectSegmen('all')"
+            >
+              All Segmen
+            </div>
+            <div
+              v-for="s in uniqueSegmens"
+              :key="s"
+              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              @click="selectSegmen(s)"
+            >
+              {{ s }}
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <div class="lg:col-span-5 flex gap-2 justify-end">
+        <button
+          @click="downloadCSV"
+          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
+        >
+          Download CSV
+        </button>
+        <button
+          @click="resetFilters"
+          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow"
+        >
+          <RotateCcw class="w-4 h-4" />
+          Reset
+        </button>
+      </div>
     </div>
 
-    <!-- Table -->
-    <div v-if="loading">Loading...</div>
-    <table v-else class="w-full border text-sm">
-      <thead>
-        <tr class="bg-gray-200">
-          <th class="p-2 border">NO</th>
-          <th class="p-2 border">Date</th>
-          <th class="p-2 border">Name</th>
-          <th class="p-2 border">Phone</th>
-          <th class="p-2 border">PIC</th>
-          <th class="p-2 border">Progress</th>
-          <th class="p-2 border">Segmen</th>
-          <th class="p-2 border">Via</th>
-          <th class="p-2 border">Country</th>
-          <th class="p-2 border">Social Media</th>
-          <th class="p-2 border">Tour Package</th>
-          <th class="p-2 border">Check In</th>
-          <th class="p-2 border">Check Out</th>
-          <th class="p-2 border">Hotel</th>
-          <th class="p-2 border">Notes</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(item, i) in filteredPIC" :key="item.id">
-          <td class="p-2 border">{{ i + 1 }}</td>
-          <td class="p-2 border">{{ item.date }}</td>
-          <td class="p-2 border">{{ item.name }}</td>
-          <td class="p-2 border">{{ item.phone }}</td>
-          <td class="p-2 border">{{ item.pic }}</td>
-          <td class="p-2 border">{{ item.progress }}</td>
-          <td class="p-2 border">{{ item.segmen }}</td>
-          <td class="p-2 border">{{ item.via }}</td>
-          <td class="p-2 border">{{ item.country }}</td>
-          <td class="p-2 border">{{ item.social_media_id }}</td>
-          <td class="p-2 border">{{ item.tour_packages }}</td>
-          <td class="p-2 border">{{ item.check_in }}</td>
-          <td class="p-2 border">{{ item.check_out }}</td>
-          <td class="p-2 border">{{ item.hotel }}</td>
-          <td class="p-2 border">{{ item.notes }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- TABLE -->
+    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
+      <table
+        class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
+      >
+        <thead class="bg-blue-900 text-white">
+          <tr>
+            <th class="px-4 py-3 text-left">NO</th>
+            <th class="px-4 py-3 text-left">Date</th>
+            <th class="px-4 py-3 text-left">Name</th>
+            <th class="px-4 py-3 text-left">Phone</th>
+            <th class="px-4 py-3 text-left">PIC</th>
+            <th class="px-4 py-3 text-left">Progress</th>
+            <th class="px-4 py-3 text-left">Segmen</th>
+            <th class="px-4 py-3 text-left">Via</th>
+            <th class="px-4 py-3 text-left">Country</th>
+            <th class="px-4 py-3 text-left">Social Media</th>
+            <th class="px-4 py-3 text-left">Tour Package</th>
+            <th class="px-4 py-3 text-left">Check In</th>
+            <th class="px-4 py-3 text-left">Check Out</th>
+            <th class="px-4 py-3 text-left">Hotel</th>
+            <th class="px-4 py-3 text-left">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="15" class="text-center p-4">Loading...</td>
+          </tr>
+          <tr v-else-if="!loading && filteredPIC.length === 0">
+            <td
+              colspan="15"
+              class="text-center p-4 text-gray-800 font-semibold"
+            >
+              Data tidak ditemukan
+            </td>
+          </tr>
+          <tr
+            v-for="(c, i) in filteredPIC"
+            :key="c.id"
+            class="border-b border-slate-200 hover:bg-blue-50"
+          >
+            <td class="px-4 py-2">{{ i + 1 }}</td>
+            <td class="px-4 py-2">{{ c.date }}</td>
+            <td class="px-4 py-2">{{ c.name }}</td>
+            <td class="px-4 py-2">{{ c.phone }}</td>
+            <td class="px-4 py-2">{{ c.pic }}</td>
+            <td class="px-4 py-2">{{ c.progress }}</td>
+            <td class="px-4 py-2">{{ c.segmen }}</td>
+            <td class="px-4 py-2">{{ c.via }}</td>
+            <td class="px-4 py-2">{{ c.country }}</td>
+            <td class="px-4 py-2">{{ c.social_media_id }}</td>
+            <td class="px-4 py-2">{{ c.tour_packages }}</td>
+            <td class="px-4 py-2">{{ c.check_in }}</td>
+            <td class="px-4 py-2">{{ c.check_out }}</td>
+            <td class="px-4 py-2">{{ c.hotel }}</td>
+            <td class="px-4 py-2">{{ c.notes }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.hidden-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hidden-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.15s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+</style>

@@ -2,10 +2,12 @@
 import { Eye, EyeOff } from "lucide-vue-next";
 import LoadingSpinner from "../components/Loading.vue";
 import { ref, onMounted } from "vue";
-import api from "../api/api";
+import { useAuthStore } from "../stores/auth";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
+const auth = useAuthStore();
+
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -29,7 +31,7 @@ onMounted(() => {
 });
 
 const login = async () => {
-  loading.value = true; // start
+  loading.value = true;
 
   emailError.value = "";
   passwordError.value = "";
@@ -46,29 +48,26 @@ const login = async () => {
     modalMsg.value = "Tolong periksa input Anda!";
     modalType.value = "error";
     showModal.value = true;
+    loading.value = false;
     return;
   }
 
   try {
-    const res = await api.post("/login", {
+    // Login via Pinia auth store
+    await auth.login({
       email: email.value,
       password: password.value,
     });
 
-    loading.value = false; // Stop
-
-    const role = res.data.user.role;
-    if (role !== "admin") {
+    // Pastikan role adalah admin
+    if (auth.role !== "admin") {
       passwordError.value = "Hanya Admin yang bisa login di halaman ini";
       modalMsg.value = "Login gagal!";
       modalType.value = "error";
       showModal.value = true;
+      loading.value = false;
       return;
     }
-
-    localStorage.setItem("access_token", res.data.access_token);
-    localStorage.setItem("refresh_token", res.data.refresh_token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
 
     modalMsg.value = "Berhasil! Mohon tunggu sebentar...";
     modalType.value = "success";
@@ -79,9 +78,12 @@ const login = async () => {
       router.push("/dashboard/home");
     }, 1500);
   } catch (err) {
-    modalMsg.value = err.response?.data?.message || "Login gagal";
+    modalMsg.value = "Harap masukan email dan password dengan benar";
+    console.error(err.response?.data?.message || err.message);
     modalType.value = "error";
     showModal.value = true;
+  } finally {
+    loading.value = false;
   }
 };
 </script>
@@ -98,11 +100,8 @@ const login = async () => {
           <div
             class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center transform transition-all"
           >
-            <h3
-              :class="modalType === 'error' ? 'text-black' : 'text-black'"
-              class="text-lg font-semibold mb-3"
-            >
-              {{ modalType === "error" ? "Gagal" : "Berhasil" }}
+            <h3 class="text-lg font-semibold mb-3">
+              {{ modalType === "error" ? "Login Gagal" : "Login Berhasil" }}
             </h3>
             <p class="text-gray-700 mb-5">{{ modalMsg }}</p>
             <button
@@ -135,10 +134,7 @@ const login = async () => {
           placeholder="Your Email"
           class="w-full px-5 py-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-        <p
-          v-if="emailError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="emailError" class="mt-1 text-red-500 text-sm">
           {{ emailError }}
         </p>
       </div>
@@ -146,15 +142,12 @@ const login = async () => {
       <!-- Password -->
       <div class="mb-7 relative">
         <label class="block text-gray-300 font-medium mb-2">Password</label>
-
         <input
           v-model="password"
           :type="showPassword ? 'text' : 'password'"
           placeholder="Password"
           class="w-full px-5 py-3 pr-12 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-
-        <!-- Icon Mata -->
         <button
           type="button"
           @click="showPassword = !showPassword"
@@ -162,20 +155,17 @@ const login = async () => {
         >
           <component :is="showPassword ? EyeOff : Eye" class="w-5 h-5" />
         </button>
-
-        <p
-          v-if="passwordError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="passwordError" class="mt-1 text-red-500 text-sm">
           {{ passwordError }}
         </p>
       </div>
 
       <button
         @click="login"
-        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300"
+        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300 flex items-center justify-center gap-2"
+        :disabled="loading"
       >
-        Login
+        <span>{{ loading ? "Memproses..." : "Login" }}</span>
       </button>
     </div>
   </div>

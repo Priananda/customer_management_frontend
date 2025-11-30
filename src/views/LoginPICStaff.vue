@@ -2,10 +2,12 @@
 import { Eye, EyeOff } from "lucide-vue-next";
 import LoadingSpinner from "../components/Loading.vue";
 import { ref, onMounted } from "vue";
-import api from "../api/api";
+import { useAuthStore } from "../stores/auth";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
+const auth = useAuthStore();
+
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -18,7 +20,7 @@ const loading = ref(false);
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-// Reset modal saat halaman mount
+// Reset saat halaman mount
 onMounted(() => {
   email.value = "";
   password.value = "";
@@ -30,15 +32,15 @@ onMounted(() => {
 });
 
 const login = async () => {
-  loading.value = true; // start
+  loading.value = true;
 
-  // Reset
+  // Reset error dan modal
   emailError.value = "";
   passwordError.value = "";
   modalMsg.value = "";
   modalType.value = "";
 
-  // Validasi sederhana
+  // Validasi input
   if (!email.value) emailError.value = "Email wajib diisi!";
   else if (!validateEmail(email.value)) emailError.value = "Email tidak valid!";
 
@@ -48,30 +50,26 @@ const login = async () => {
     modalMsg.value = "Tolong periksa input Anda!";
     modalType.value = "error";
     showModal.value = true;
+    loading.value = false;
     return;
   }
 
   try {
-    const res = await api.post("/login", {
+    // Login via Pinia auth store
+    await auth.login({
       email: email.value,
       password: password.value,
     });
 
-    loading.value = false; // Stop
-
-    const role = res.data.user.role;
-    if (role !== "pic" && role !== "staff") {
+    // Pastikan role adalah pic atau staff
+    if (!["pic", "staff"].includes(auth.role)) {
       passwordError.value = "Hanya PIC / Staff yang bisa login di halaman ini";
       modalMsg.value = "Login gagal!";
       modalType.value = "error";
       showModal.value = true;
+      loading.value = false;
       return;
     }
-
-    // Simpan token
-    localStorage.setItem("access_token", res.data.access_token);
-    localStorage.setItem("refresh_token", res.data.refresh_token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
 
     modalMsg.value = "Berhasil! Mohon tunggu sebentar...";
     modalType.value = "success";
@@ -82,15 +80,23 @@ const login = async () => {
       router.push("/dashboard/home");
     }, 1500);
   } catch (err) {
-    modalMsg.value = err.response?.data?.message || "Login gagal";
+    // Selalu tampilkan pesan custom
+    modalMsg.value = "Harap masukan email dan password dengan benar";
+
+    // Optional: jika mau, bisa log server message ke console
+    console.error(err.response?.data?.message || err.message);
+
     modalType.value = "error";
     showModal.value = true;
+  } finally {
+    loading.value = false;
   }
 };
 </script>
 
 <template>
   <div class="flex items-center justify-center min-h-screen bg-black px-1">
+    <!-- Modal -->
     <transition name="modal-fade">
       <div
         v-if="showModal"
@@ -100,11 +106,8 @@ const login = async () => {
           <div
             class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center transform transition-all"
           >
-            <h3
-              :class="modalType === 'error' ? 'text-black' : 'text-black'"
-              class="text-lg font-semibold mb-3"
-            >
-              {{ modalType === "error" ? "Gagal" : "Berhasil" }}
+            <h3 class="text-lg font-semibold mb-3">
+              {{ modalType === "error" ? "Login Gagal" : " Login Berhasil" }}
             </h3>
             <p class="text-gray-700 mb-5">{{ modalMsg }}</p>
             <button
@@ -128,6 +131,7 @@ const login = async () => {
         Please enter your credentials to continue.
       </p>
 
+      <!-- Email -->
       <div class="mb-6">
         <label class="block text-gray-300 font-medium mb-2">Email</label>
         <input
@@ -136,24 +140,20 @@ const login = async () => {
           placeholder="Your Email"
           class="w-full px-5 py-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-        <p
-          v-if="emailError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="emailError" class="mt-1 text-red-500 text-sm">
           {{ emailError }}
         </p>
       </div>
 
+      <!-- Password -->
       <div class="mb-7 relative">
         <label class="block text-gray-300 font-medium mb-2">Password</label>
-
         <input
           v-model="password"
           :type="showPassword ? 'text' : 'password'"
           placeholder="Password"
-          class="w-full px-5 py-3 pr-12 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
+          class="w-full px-5 py-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-
         <button
           type="button"
           @click="showPassword = !showPassword"
@@ -161,28 +161,25 @@ const login = async () => {
         >
           <component :is="showPassword ? EyeOff : Eye" class="w-5 h-5" />
         </button>
-
-        <p
-          v-if="passwordError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="passwordError" class="mt-1 text-red-500 text-sm">
           {{ passwordError }}
         </p>
       </div>
 
       <button
         @click="login"
-        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300"
+        class="w-full text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300 flex items-center justify-center gap-2"
+        :disabled="loading"
       >
-        Login
+        <span>{{ loading ? "Memproses..." : "Login" }}</span>
       </button>
     </div>
   </div>
+
   <LoadingSpinner v-if="loading" />
 </template>
 
 <style>
-/* Animasi modal fade */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;
@@ -196,7 +193,6 @@ const login = async () => {
   opacity: 1;
 }
 
-/* Animasi modal scale */
 .modal-scale-enter-active,
 .modal-scale-leave-active {
   transition: transform 0.3s ease, opacity 0.3s ease;

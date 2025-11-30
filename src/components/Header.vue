@@ -17,7 +17,7 @@ function formatName(name) {
 <template>
   <header class="h-16 bg-white flex items-center px-5 gap-4">
     <button @click="emit('toggleSidebar')" class="">
-      <Menu class="w-6 h-6 text-blue-500 hover:text-blue-600" />
+      <Menu class="w-6 h-6 text-gray-700 hover:text-gray-800" />
     </button>
 
     <p class="text-lg font-semibold">Customer Management</p>

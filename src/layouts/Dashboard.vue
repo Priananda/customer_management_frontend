@@ -1,41 +1,68 @@
+<!-- AdminDashboard.vue -->
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import Sidebar from "../components/Sidebar.vue";
 import Header from "../components/Header.vue";
-import { useLogout } from "../composables/useLogout";
 import LoadingSpinner from "../components/Loading.vue";
-const user = JSON.parse(localStorage.getItem("user") || "{}");
-const role = user.role;
-const { logout, role: logoutRole } = useLogout();
+import { useAuthStore } from "../stores/auth";
+import { useLogout } from "../composables/useLogout";
+
+// Ambil store auth
+const auth = useAuthStore();
+
+// Reactive user dan role dari Pinia store
+const user = computed(() => auth.user);
+const role = computed(() => auth.role);
+
+// Logout
+const { logout } = useLogout();
+
+// Sidebar collapsed state
 const collapsed = ref(false);
 const loading = ref(false);
 </script>
 
 <template>
-  <div class="flex h-screen">
+  <div class="flex min-h-screen bg-gray-50">
     <!-- SIDEBAR -->
     <Sidebar
+      v-if="user"
       :user="user"
       :role="role"
       :logout="logout"
-      :logoutRole="logoutRole"
       :collapsed="collapsed"
       @toggle="collapsed = !collapsed"
       @loading-start="loading = true"
     />
+
     <!-- MAIN CONTENT -->
     <div
       class="flex-1 flex flex-col transition-all duration-300"
       :class="collapsed ? 'ml-0' : 'ml-64'"
     >
       <Header
+        v-if="user"
         :user="user"
         :role="role"
         @toggleSidebar="collapsed = !collapsed"
       />
-      <main class="p-5 flex-1 overflow-auto"><router-view /></main>
+      <main class="p-6 flex-1 overflow-auto hidden-scroll">
+        <router-view />
+      </main>
     </div>
-  </div>
 
-  <LoadingSpinner v-if="loading" />
+    <!-- Loading Spinner -->
+    <LoadingSpinner v-if="loading" />
+  </div>
 </template>
+
+<style scoped>
+.hidden-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hidden-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>

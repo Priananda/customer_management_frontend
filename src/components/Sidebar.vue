@@ -1,30 +1,21 @@
 <script setup>
 import { ref } from "vue";
-import {
-  ChevronDown,
-  ChevronRight,
-  Home,
-  Users,
-  UserPlus,
-  FileCheck,
-  User,
-  Shield,
-  LogOut,
-} from "lucide-vue-next";
+import { Home, Users, UserPlus, LogOut, ChevronDown } from "lucide-vue-next";
+import { useAuthStore } from "../stores/auth.js";
+
+const isLoggingOut = ref(false);
 
 const props = defineProps({
+  collapsed: Boolean,
   user: Object,
   role: String,
-  logout: Function,
-  logoutRole: String,
-  collapsed: Boolean,
 });
 
-const emit = defineEmits(["toggle"]);
+const emit = defineEmits(["toggle", "loading-start"]);
 
-// Control submenu dropdown
+const authStore = useAuthStore();
+
 const openMenu = ref({
-  dashboard: true,
   customer: true,
   management: true,
 });
@@ -46,11 +37,14 @@ function formatName(name) {
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 }
 
-function handleLogout() {
-  emit("loading-start");
-  setTimeout(() => {
-    props.logout(); // Jalankan logout asli
-  }, 300);
+async function handleLogout() {
+  isLoggingOut.value = true;
+  emit("loading-start"); // opsional
+  try {
+    await authStore.logout();
+  } finally {
+    isLoggingOut.value = false;
+  }
 }
 </script>
 
@@ -58,196 +52,149 @@ function handleLogout() {
   <transition name="slide">
     <aside
       v-if="!collapsed"
-      class="w-64 bg-white fixed top-0 left-0 bottom-0 flex flex-col shadow-xl shadow-blue-50"
+      class="w-64 fixed top-0 left-0 bottom-0 flex flex-col z-50 shadow-xl rounded-tr-xl rounded-br-xl overflow-hidden bg-linear-to-b from-cyan-700 to-blue-900"
     >
-      <!-- Header -->
-      <div class="p-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
+      <!-- User Header -->
+      <div
+        class="p-4 flex flex-col justify-between bg-opacity-90 backdrop-blur-sm"
+      >
+        <div class="flex items-center gap-3 mb-2">
           <div
-            class="bg-linear-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-full w-10 h-10 flex items-center justify-center text-sm shadow-sm"
+            class="bg-white text-blue-600 font-bold rounded-full w-10 h-10 flex items-center justify-center text-sm shadow-lg"
           >
             {{ NameInitial(user.name) }}
           </div>
-
-          <p class="text-lg font-semibold">
+          <p class="text-lg font-semibold text-white">
             {{ formatName(user.name) }}
           </p>
         </div>
 
+        <!-- Subjudul Customer Management -->
+        <p class="text-sm text-white/80 ml-13">Customer Management</p>
+
         <button
           @click="emit('toggle')"
-          class="p-1 text-blue-500 hover:text-blue-700 rounded text-lg font-semibold"
+          class="absolute top-4 right-4 text-white hover:text-gray-200 text-lg font-semibold"
         >
           ✕
         </button>
       </div>
 
-      <div class="mt-5 mb-2">
-        <p class="text-md text-center">Customer Management</p>
-      </div>
-
-      <!-- MENU TITLE -->
-      <p class="px-4 pt-5 text-xs font-semibold text-slate-600 tracking-wider">
-        MENU
-      </p>
-
-      <!-- Menu wrapper -->
-      <nav class="flex-1 px-2 mt-4 space-y-3 overflow-y-auto">
+      <!-- Sidebar Menu -->
+      <nav
+        class="text-[15px] flex-1 mt-4 px-2 space-y-3 overflow-y-auto hidden-scroll"
+      >
         <!-- Dashboard -->
-        <div>
-          <router-link
-            to="/dashboard/home"
-            class="w-full flex items-center justify-between px-4 py-2 rounded-lg hover:bg-blue-50 transition"
-          >
-            <div class="flex items-center gap-3 text-gray-800">
-              <Home class="w-5 h-5" />
-              <span>Dashboard</span>
-            </div>
-          </router-link>
-        </div>
-
-        <!-- Customer management for all roles -->
-        <div
-          v-if="
-            role === 'pic' ||
-            role === 'staff' ||
-            role === 'admin' ||
-            role === 'super_admin'
-          "
+        <router-link
+          to="/dashboard/home"
+          class="flex items-center gap-3 px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
         >
+          <Home class="w-5 h-5" />
+          Dashboard
+        </router-link>
+
+        <!-- Customer Menu -->
+        <div v-if="['pic', 'staff', 'admin', 'super_admin'].includes(role)">
           <button
             @click="toggleMenu('customer')"
-            class="w-full flex items-center justify-between px-4 py-2 rounded-lg hover:bg-blue-50 transition"
+            class="flex items-center justify-between w-full px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
           >
             <div class="flex items-center gap-3">
-              <UserPlus class="w-5 h-5" />
-              <span>Customer</span>
+              <UserPlus class="w-5 h-5" /> Customer
             </div>
-            <transition name="rotate">
-              <component
-                :is="ChevronDown"
-                :class="[
-                  'w-4 h-4 text-blue-500 transition-transform duration-300',
-                  openMenu.customer ? 'rotate-0' : '-rotate-90',
-                ]"
-              />
-            </transition>
+            <ChevronDown
+              :class="[
+                'w-4 h-4 transition-transform',
+                openMenu.customer ? 'rotate-0' : '-rotate-90',
+              ]"
+            />
           </button>
-
-          <transition name="slide-fade">
-            <div v-if="openMenu.customer" class="ml-9 mt-2 space-y-1">
-              <router-link
-                to="/dashboard/new-customer"
-                class="block px-3 py-2 text-gray-700 hover:bg-blue-100 rounded-lg"
-              >
-                New Customer
-              </router-link>
-
-              <router-link
-                to="/dashboard/deal-customer"
-                class="block px-3 py-2 text-gray-700 hover:bg-blue-100 rounded-lg"
-              >
-                Deal Customer
-              </router-link>
-            </div>
-          </transition>
+          <div v-if="openMenu.customer" class="ml-6 mt-2 space-y-1">
+            <router-link
+              to="/dashboard/new-customer"
+              class="block px-3 py-2 text-white hover:bg-white/20 rounded-lg transition"
+              >New Customer</router-link
+            >
+            <router-link
+              to="/dashboard/deal-customer"
+              class="block px-3 py-2 text-white hover:bg-white/20 rounded-lg transition"
+              >Deal Customer</router-link
+            >
+          </div>
         </div>
 
-        <!-- Management (only admin & super admin) -->
-        <div v-if="role === 'admin' || role === 'super_admin'">
+        <!-- Management Menu -->
+        <div v-if="['admin', 'super_admin'].includes(role)">
           <button
             @click="toggleMenu('management')"
-            class="w-full flex items-center justify-between px-4 py-2 rounded-lg hover:bg-blue-50 transition"
+            class="flex items-center justify-between w-full px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
           >
             <div class="flex items-center gap-3">
-              <Users class="w-5 h-5" />
-              <span>Management</span>
+              <Users class="w-5 h-5" /> Management
             </div>
-            <transition name="rotate">
-              <component
-                :is="ChevronDown"
-                :class="[
-                  'w-4 h-4 text-blue-500 transition-transform duration-300',
-                  openMenu.management ? 'rotate-0' : '-rotate-90',
-                ]"
-              />
-            </transition>
+            <ChevronDown
+              :class="[
+                'w-4 h-4 transition-transform',
+                openMenu.management ? 'rotate-0' : '-rotate-90',
+              ]"
+            />
           </button>
-
-          <transition name="slide-fade">
-            <div v-if="openMenu.management" class="ml-9 mt-2 space-y-1">
-              <router-link
-                to="/dashboard/view-data-pic"
-                class="block px-3 py-2 text-gray-700 hover:bg-blue-100 rounded-lg"
-              >
-                View Data PIC
-              </router-link>
-
-              <router-link
-                to="/dashboard/view-data-staff"
-                class="block px-3 py-2 text-gray-700 hover:bg-blue-100 rounded-lg"
-              >
-                View Data Staff
-              </router-link>
-
-              <router-link
-                v-if="role === 'super_admin'"
-                to="/dashboard/view-data-admin"
-                class="block px-3 py-2 text-gray-700 hover:bg-blue-100 rounded-lg"
-              >
-                View Data Admin
-              </router-link>
-            </div>
-          </transition>
+          <div v-if="openMenu.management" class="ml-6 mt-2 space-y-1">
+            <router-link
+              to="/dashboard/view-data-pic"
+              class="block px-3 py-2 text-white hover:bg-white/20 rounded-lg transition"
+              >View Data PIC</router-link
+            >
+            <router-link
+              to="/dashboard/view-data-staff"
+              class="block px-3 py-2 text-white hover:bg-white/20 rounded-lg transition"
+              >View Data Staff</router-link
+            >
+            <router-link
+              v-if="role === 'super_admin'"
+              to="/dashboard/view-data-admin"
+              class="block px-3 py-2 text-white hover:bg-white/20 rounded-lg transition"
+              >View Data Admin</router-link
+            >
+          </div>
         </div>
       </nav>
 
-      <!-- LOGOUT -->
+      <!-- Logout -->
       <button
         @click="handleLogout"
-        class="m-4 px-4 py-2 flex items-center justify-center gap-2 text-white rounded-lg shadow-md bg-blue-500 hover:bg-blue-600"
+        class="m-4 px-4 py-2 flex items-center justify-center gap-2 bg-white text-blue-900 rounded-lg shadow-lg hover:bg-white/90 transition"
       >
-        <LogOut class="w-5 h-5" />
-        Logout
+        <LogOut class="w-5 h-5" /> Logout
       </button>
     </aside>
   </transition>
 </template>
 
 <style scoped>
-/* Animasi menu nav */
-.slide-fade-enter-from,
-.slide-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
+.hidden-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hidden-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-.slide-fade-enter-to,
-.slide-fade-leave-from {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.slide-fade-enter-active,
-.slide-fade-leave-active {
-  transition: all 0.2s ease;
-}
-
-.rotate-enter-from,
-.rotate-leave-to {
-  opacity: 0;
-  transform: rotate(-90deg);
-}
-
-/* Animasi arrow */
-.rotate-enter-to,
-.rotate-leave-from {
-  opacity: 1;
-  transform: rotate(0deg);
-}
-
-.rotate-enter-active,
-.rotate-leave-active {
+.slide-enter-active,
+.slide-leave-active {
   transition: all 0.3s ease;
+}
+.slide-enter-from {
+  transform: translateX(-100%);
+}
+.slide-enter-to {
+  transform: translateX(0);
+}
+.slide-leave-from {
+  transform: translateX(0);
+}
+.slide-leave-to {
+  transform: translateX(-100%);
 }
 </style>
