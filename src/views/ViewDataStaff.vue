@@ -365,7 +365,7 @@ const progressColor = (progress) => {
               colspan="15"
               class="text-center p-4 text-gray-800 font-semibold"
             >
-              Data tidak ditemukan
+              Data not found
             </td>
           </tr>
           <tr
