@@ -172,7 +172,7 @@ const login = async () => {
       >
         <span>{{ loading ? "Memproses..." : "Login" }}</span>
       </button>
-      <!-- Link ke Register -->
+
       <div class="mt-4 text-center">
         <RouterLink
           to="/register-pic-staff"

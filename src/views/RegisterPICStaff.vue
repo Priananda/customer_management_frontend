@@ -109,7 +109,7 @@ const register = async () => {
         Register PIC / Staff
       </h2>
       <p class="text-center text-gray-300 mb-6">
-        Masukkan data untuk membuat akun
+        Enter data to create an account
       </p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -206,10 +206,9 @@ const register = async () => {
         class="w-full mt-6 text-md py-3 font-medium rounded-full bg-linear-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-500 hover:to-blue-600 shadow-lg transform hover:scale-105 transition-transform duration-300 flex items-center justify-center gap-2"
         :disabled="loading"
       >
-        <LoadingSpinner v-if="loading" class="h-5 w-5" />
         <span>{{ loading ? "Memproses..." : "Register" }}</span>
       </button>
-      <!-- Link ke Register -->
+
       <div class="mt-4 text-center">
         <RouterLink
           to="/login-pic-staff"

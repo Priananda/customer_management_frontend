@@ -11,7 +11,7 @@ import {
 import { useAuthStore } from "../stores/auth.js";
 
 const isLoggingOut = ref(false);
-const emit = defineEmits(["toggle"]);
+const emit = defineEmits(["toggle", "loading-start"]);
 const authStore = useAuthStore();
 const openMenu = ref({
   customer: false,
@@ -43,6 +43,8 @@ function formatName(name) {
 }
 
 async function handleLogout() {
+  emit("loading-start");
+
   isLoggingOut.value = true;
   try {
     await authStore.logout();
@@ -69,12 +71,18 @@ function handleLinkClick() {
       >
         <div class="flex items-center gap-3 mb-2">
           <div
-            class="bg-white text-black font-bold rounded-full w-10 h-10 flex items-center justify-center text-sm shadow-lg"
+            class="bg-white text-cyan-700 font-bold rounded-full w-10 h-10 flex items-center justify-center text-sm shadow-lg"
           >
             {{ NameInitial(user.name) }}
           </div>
           <p class="text-lg font-semibold text-white">
             {{ formatName(user.name) }}
+          </p>
+          <p
+            v-if="['pic', 'staff'].includes(role)"
+            class="text-[15px] text-white/80 uppercase"
+          >
+            {{ role.replace("_", " ") }}
           </p>
         </div>
 
