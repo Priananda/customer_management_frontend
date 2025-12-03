@@ -8,7 +8,9 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-vue-next";
-import { ref, computed, onMounted } from "vue";
+import ConfirmModal from "@/components/ConfirmModalDelete.vue";
+import TablePagination from "../components/TablePagination.vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import api from "../api/api";
 
 // State
@@ -24,6 +26,7 @@ const selectedSegmen = ref("all");
 const isLoading = ref(false);
 
 // dropdown state
+const customerDropdownRef = ref(null);
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
 
@@ -43,6 +46,11 @@ const showAlert = ref(false);
 // loading tabel
 const loading = ref(false);
 
+// Paginasi
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalItems = ref(0);
+
 const dealForm = ref({
   id: null,
   new_customer_id: "",
@@ -53,14 +61,15 @@ const dealForm = ref({
   payment_status: null,
 });
 
-// Fetch Data API
+// Modal delete
+const showDeleteModal = ref(false);
+const selectedId = ref(null);
+
 const loadData = async () => {
   try {
-    // Fetch New Customers tanpa loading
     const nc = await api.get("/new-customer");
     newCustomers.value = nc.data.data || [];
 
-    // Fetch Deal Customers dengan loading
     loading.value = true;
     try {
       const dc = await api.get("/deal-customer");
@@ -77,15 +86,13 @@ const loadData = async () => {
   }
 };
 
-// Fungsi ketika pilih PIC
 const onSelectCustomer = () => {
   selectedCustomer.value = newCustomers.value.find(
     (c) => c.id == dealForm.value.new_customer_id
   );
 };
 
-// Submit Form
-const saveDeal = async () => {
+const handleSave = async () => {
   const fd = new FormData();
   isLoading.value = true;
 
@@ -105,12 +112,10 @@ const saveDeal = async () => {
       });
     }
 
-    // sukses
     alertType.value = "success";
     alertMessage.value = "Data berhasil disimpan!";
     showAlert.value = true;
   } catch (error) {
-    // error
     alertType.value = "error";
     alertMessage.value = "Terjadi kesalahan. Gagal menyimpan data!";
     showAlert.value = true;
@@ -124,10 +129,8 @@ const saveDeal = async () => {
 
 // Edit
 const editDeal = (d) => {
-  // Simpan original sebelum diedit
   originalDealData.value = JSON.parse(JSON.stringify(d));
 
-  // Set form untuk mode edit
   dealForm.value = {
     id: d.id,
     new_customer_id: d.new_customer_id,
@@ -140,17 +143,21 @@ const editDeal = (d) => {
 
   selectedCustomer.value = d.new_customer;
   selectedCustomerText.value = `${d.new_customer.name} — (${d.new_customer.phone})`;
-
   isEditing.value = true;
 };
 
-// Delete
-const deleteDeal = async (id) => {
-  await api.delete(`/deal-customer/${id}`);
-  loadData();
+const confirmDelete = async () => {
+  try {
+    await api.delete(`/deal-customer/${selectedId.value}`);
+    await loadData();
+  } catch (error) {
+    console.error("Gagal menghapus data:", error);
+    alert("Terjadi kesalahan saat menghapus data.");
+  } finally {
+    showDeleteModal.value = false;
+  }
 };
 
-// Reset Form untuk mengkosongkan input dan memulai create baru
 const reset = () => {
   dealForm.value = {
     id: null,
@@ -163,19 +170,14 @@ const reset = () => {
   };
   selectedCustomer.value = null;
 };
-
-// Di Mount
 onMounted(loadData);
 
-// Search & Filter
 const filteredDeals = computed(() => {
   return deals.value.filter((d) => {
     const c = d.new_customer;
     if (!c) return false;
 
     const keyword = searchKeyword.value.toLowerCase();
-
-    // Gabung semua field yang mau dicari keyword
     const allFields = [
       c.date,
       c.phone,
@@ -192,7 +194,12 @@ const filteredDeals = computed(() => {
       c.hotel,
       d.handler,
       d.link_drive,
-      String(d.total_pax), // convert number ke string
+
+      c.via,
+      d.social_media_id,
+      d.notes,
+
+      String(d.total_pax),
       d.activity,
       d.payment_status ? d.payment_status.name || String(d.payment_status) : "",
     ].map((f) => f?.toLowerCase() || "");
@@ -218,7 +225,6 @@ const filteredDeals = computed(() => {
   });
 });
 
-// Unik Segment
 const uniqueSegmens = computed(() => {
   const segmens = new Set();
   deals.value.forEach((d) => {
@@ -228,7 +234,6 @@ const uniqueSegmens = computed(() => {
   return Array.from(segmens);
 });
 
-// Dowload File CSV
 const downloadCSV = () => {
   const headers = [
     "Customer Name",
@@ -247,10 +252,14 @@ const downloadCSV = () => {
     "Total Pax",
     "Activity",
     "Payment Status",
+    "Via",
+    "Social Media ID",
+    "Notes",
   ];
 
   const rows = filteredDeals.value.map((d) => {
     const c = d.new_customer || {};
+
     return [
       c.name || "",
       c.pic || "",
@@ -263,11 +272,16 @@ const downloadCSV = () => {
       c.check_in || "",
       c.check_out || "",
       c.hotel || "",
+
       d.handler || "",
       d.link_drive || "",
-      d.total_pax != null ? d.total_pax : "",
+      d.total_pax ?? "",
       d.activity || "",
-      d.payment_status ? d.payment_status.name || d.payment_status : "",
+      d.payment_status?.name || d.payment_status || "",
+
+      c.via || "",
+      c.social_media_id || "",
+      c.notes || "",
     ];
   });
 
@@ -292,18 +306,16 @@ const resetFilters = () => {
   selectedSegmen.value = "all";
 };
 
-// buka hanya progress, tutup yang lain
 const openOnlyProgress = () => {
   showProgressDropdown.value = !showProgressDropdown.value;
   showSegmenDropdown.value = false;
 };
 
-// buka hanya segmen, tutup yang lain
 const openOnlySegmen = () => {
   showSegmenDropdown.value = !showSegmenDropdown.value;
   showProgressDropdown.value = false;
 };
-// tutup semua dropdown saat klik field lain
+
 const closeAllDropdowns = () => {
   showProgressDropdown.value = false;
   showSegmenDropdown.value = false;
@@ -320,14 +332,13 @@ const selectSegmen = (val) => {
   showSegmenDropdown.value = false;
 };
 
-// close jika klik luar
 onMounted(() => {
   window.addEventListener("click", () => {
     closeAllDropdowns();
   });
 });
 
-const progressClass = (status) => {
+const progressColor = (status) => {
   if (!status) return "bg-slate-100 text-slate-600";
 
   const s = status.toString().trim().toUpperCase();
@@ -358,12 +369,11 @@ const progressClass = (status) => {
   }
 };
 
-// buka/tutup dropdown
 const toggleCustomerDropdown = () => {
   closeAllDropdowns();
   showCustomerDropdown.value = !showCustomerDropdown.value;
 };
-// pilih customer
+
 const selectCustomer = (cust) => {
   if (!cust) {
     dealForm.value.new_customer_id = "";
@@ -371,7 +381,7 @@ const selectCustomer = (cust) => {
   } else {
     dealForm.value.new_customer_id = cust.id;
     selectedCustomerText.value = `${cust.name} — (${cust.phone})`;
-    onSelectCustomer(); // fungsi existing kamu
+    onSelectCustomer();
   }
 
   showCustomerDropdown.value = false;
@@ -396,10 +406,49 @@ const cancelEdit = () => {
   isEditing.value = false;
   originalDealData.value = null;
 };
+
+const handleDropdownOutside = (event) => {
+  if (
+    customerDropdownRef.value &&
+    !customerDropdownRef.value.contains(event.target)
+  ) {
+    showCustomerDropdown.value = false;
+  }
+};
+onMounted(() => {
+  window.addEventListener("click", handleDropdownOutside);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("click", handleDropdownOutside);
+});
+
+const progressWidthModal = (progress) => {
+  const p = (progress || "").toLowerCase();
+  if (p === "deal") return "100%";
+  if (p === "on progress") return "60%";
+  if (p === "canceled") return "30%";
+  return "40%";
+};
+
+const paginatedDataCustomers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  totalItems.value = filteredDeals.value.length;
+  return filteredDeals.value.slice(start, end);
+});
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
+  currentPage.value = 1;
+});
+
+const openDeleteModal = (id) => {
+  selectedId.value = id;
+  showDeleteModal.value = true;
+};
 </script>
 
 <template>
-  <div class="p-5 mx-auto max-w-6xl">
+  <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
     <transition
       enter-from-class="opacity-0 -translate-y-2"
       enter-active-class="transition-all duration-300"
@@ -421,7 +470,6 @@ const cancelEdit = () => {
       </div>
     </transition>
 
-    <!-- TITLE -->
     <h2
       class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
@@ -430,19 +478,21 @@ const cancelEdit = () => {
     <p class="text-md mb-6 text-slate-600">
       See all deal customer, and summary report
     </p>
-    <!-- ===== FORM DEAL CUSTOMER ===== -->
+    <!-- Form deal customer -->
     <div class="bg-white rounded-xl shadow border border-slate-200 p-6 mb-8">
       <h3 class="text-lg font-semibold mb-4 text-slate-700">
         Form Deal Customer
       </h3>
 
-      <!-- Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
         <!-- Select Customer -->
-        <div class="col-span-2 relative" id="customer-dropdown">
+        <div
+          class="col-span-2 relative"
+          id="customer-dropdown"
+          ref="customerDropdownRef"
+        >
           <label class="font-semibold text-slate-700">Select Customer</label>
 
-          <!-- Button -->
           <button
             @click.stop="toggleCustomerDropdown"
             class="mt-1 w-full bg-white/80 backdrop-blur-xl border border-slate-300 rounded-lg px-4 py-3 flex items-center justify-between hover:shadow-md transition-all"
@@ -453,12 +503,18 @@ const cancelEdit = () => {
             <ChevronDown class="w-5 h-5 text-slate-500" />
           </button>
 
-          <!-- Dropdown -->
           <transition name="dropdown">
             <div
               v-if="showCustomerDropdown"
-              class="absolute z-50 mt-1 w-full bg-white backdrop-blur-xl border border-slate-200 rounded-lg shadow-md max-h-60 overflow-y-auto"
+              class="absolute z-20 mt-1 w-full bg-white backdrop-blur-xl border border-slate-200 rounded-lg shadow-md max-h-60 overflow-y-auto hidden-scroll"
             >
+              <div
+                class="px-4 py-3 hover:bg-red-50/60 cursor-pointer flex justify-between text-red-700 font-semibold"
+                @click="selectCustomer(null)"
+              >
+                Batal
+              </div>
+
               <div
                 v-for="nc in newCustomers"
                 :key="nc.id"
@@ -466,13 +522,19 @@ const cancelEdit = () => {
                 @click="selectCustomer(nc)"
               >
                 <span class="font-medium">{{ nc.name }}</span>
-                <span class="text-slate-400 text-sm">({{ nc.phone }})</span>
+                <span
+                  :class="[
+                    'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-24',
+                    progressColor(nc.progress),
+                  ]"
+                >
+                  {{ nc.progress }}
+                </span>
               </div>
             </div>
           </transition>
         </div>
 
-        <!-- Customer Preview -->
         <div
           v-if="selectedCustomer"
           class="col-span-2 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-md text-sm shadow"
@@ -490,12 +552,34 @@ const cancelEdit = () => {
               <b class="font-semibold">Phone:</b> {{ selectedCustomer.phone }}
             </p>
             <p>
-              <b class="font-semibold">Guest:</b> {{ selectedCustomer.name }}
+              <b class="font-semibold">Customer Name:</b>
+              {{ selectedCustomer.name }}
             </p>
-            <p>
+            <p class="flex items-center gap-2">
               <b class="font-semibold">Progress:</b>
-              {{ selectedCustomer.progress }}
+
+              <span
+                :class="[
+                  'inline-flex items-center justify-center px-5 py-1 rounded-full text-xs font-semibold',
+                  progressColor(selectedCustomer.progress),
+                ]"
+              >
+                {{ selectedCustomer.progress }}
+              </span>
             </p>
+
+            <div class="w-full bg-gray-200 rounded-full h-3 mt-1">
+              <div
+                :class="[
+                  'h-3 rounded-full transition-all duration-300',
+                  progressColor(selectedCustomer.progress),
+                ]"
+                :style="{
+                  width: progressWidthModal(selectedCustomer.progress),
+                }"
+              ></div>
+            </div>
+
             <p>
               <b class="font-semibold">Segmen:</b> {{ selectedCustomer.segmen }}
             </p>
@@ -504,7 +588,7 @@ const cancelEdit = () => {
               {{ selectedCustomer.country }}
             </p>
             <p>
-              <b class="font-semibold">Packages:</b>
+              <b class="font-semibold">Tour Packages:</b>
               {{ selectedCustomer.tour_packages }}
             </p>
             <p>
@@ -518,10 +602,18 @@ const cancelEdit = () => {
             <p>
               <b class="font-semibold">Hotel:</b> {{ selectedCustomer.hotel }}
             </p>
+            <p><b class="font-semibold">Via:</b> {{ selectedCustomer.via }}</p>
+            <p>
+              <b class="font-semibold">Social Media:</b>
+              {{ selectedCustomer.social_media_id }}
+            </p>
+            <p>
+              <b class="font-semibold">Note:</b>
+              {{ selectedCustomer.notes }}
+            </p>
           </div>
         </div>
 
-        <!-- Form Input -->
         <div>
           <label class="font-semibold text-slate-700">Handler</label>
           <input
@@ -559,7 +651,6 @@ const cancelEdit = () => {
           />
         </div>
 
-        <!-- Payment Status -->
         <div class="col-span-2">
           <label class="font-semibold text-slate-700"
             >Payment Status (Upload)</label
@@ -572,14 +663,13 @@ const cancelEdit = () => {
         </div>
       </div>
 
-      <!-- Save Button -->
+      <!-- Save -->
       <div class="text-[15px] flex gap-2 justify-end mt-4">
         <button
-          @click="saveDeal"
+          @click="handleSave"
           :disabled="isLoading"
           class="px-4 py-2 bg-blue-900 text-white rounded-lg flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          <!-- Spinner -->
           <svg
             v-if="isLoading"
             class="w-5 h-5 animate-spin text-white"
@@ -601,12 +691,8 @@ const cancelEdit = () => {
               d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
             ></path>
           </svg>
-
-          <!-- Text -->
           {{ isLoading ? "Memproses..." : isEditing ? "Update" : "Save" }}
         </button>
-
-        <!-- Tombol Batal Edit (hanya muncul saat edit) -->
         <button
           v-if="isEditing"
           @click="cancelEdit"
@@ -617,7 +703,7 @@ const cancelEdit = () => {
       </div>
     </div>
 
-    <!-- ===== FILTER BAR ===== -->
+    <!--Filter Bar -->
     <div
       class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
     >
@@ -701,7 +787,7 @@ const cancelEdit = () => {
         <transition name="dropdown">
           <div
             v-if="showSegmenDropdown"
-            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -722,16 +808,6 @@ const cancelEdit = () => {
         </transition>
       </div>
 
-      <!-- Add Customer -->
-      <div class="flex items-center gap-2">
-        <button
-          @click="openCreateModal"
-          class="w-full bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 rounded-lg"
-        >
-          Add Customer
-        </button>
-      </div>
-
       <div class="lg:col-span-5 flex gap-2 justify-end">
         <button
           @click="downloadCSV"
@@ -749,21 +825,24 @@ const cancelEdit = () => {
       </div>
     </div>
 
-    <!-- ===== TABLE ===== -->
+    <!-- Table -->
     <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
       <table
         class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
       >
         <thead class="bg-blue-900 text-white">
           <tr>
-            <th class="px-4 py-3 text-left w-[12%]">Customer</th>
-            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
+            <th class="px-4 py-3 text-left">No</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[10%]">Phone</th>
+            <th class="px-4 py-3 text-left w-[12%]">Customer Name</th>
             <th class="px-4 py-3 text-left w-[10%]">Progress</th>
+            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
             <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
+            <th class="px-4 py-3 text-left w-[10%]">via</th>
             <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[12%]">Packages</th>
+            <th class="px-4 py-3 text-left w-[10%]">Social Media</th>
+            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
             <th class="px-4 py-3 text-left w-[8%]">Check In</th>
             <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
             <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
@@ -771,14 +850,21 @@ const cancelEdit = () => {
             <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
             <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
             <th class="px-4 py-3 text-left w-[10%]">Activity</th>
-            <th class="px-4 py-3 text-left w-[10%]">Payment</th>
+            <th class="px-4 py-3 text-left w-[10%]">Payment Satus</th>
+            <th class="px-4 py-3 text-left w-[10%]">Notes</th>
             <th class="px-4 py-3 text-left w-[10%]">Actions</th>
           </tr>
         </thead>
 
         <tbody>
           <tr v-if="loading">
-            <td colspan="15" class="text-center p-4">Loading...</td>
+            <td colspan="15" class="p-4">
+              <div class="space-y-2">
+                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
+              </div>
+            </td>
           </tr>
           <tr v-else-if="!loading && filteredDeals.length === 0">
             <td
@@ -789,40 +875,48 @@ const cancelEdit = () => {
             </td>
           </tr>
           <tr
-            v-for="d in filteredDeals"
+            v-for="(d, i) in paginatedDataCustomers"
             :key="d.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
             <!-- Customer -->
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ d.new_customer?.name }}
-            </td>
-
-            <td class="px-4 py-3 whitespace-nowrap">
-              {{ d.new_customer?.pic }}
-            </td>
+            <td class="px-4 py-2">{{ i + 1 }}</td>
             <td class="px-4 py-3 whitespace-nowrap">
               {{ d.new_customer?.date }}
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {{ d.new_customer?.phone }}
             </td>
-
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ d.new_customer?.name }}
+            </td>
             <!-- Progress badge -->
             <td class="px-4 py-3">
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-28',
-                  progressClass(d.new_customer?.progress),
+                  progressColor(d.new_customer?.progress),
                 ]"
               >
                 {{ d.new_customer?.progress }}
               </span>
             </td>
-
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ d.new_customer?.pic }}
+            </td>
             <td class="px-4 py-3">{{ d.new_customer?.segmen }}</td>
+            <td>{{ d.new_customer.via }}</td>
             <td class="px-4 py-3 whitespace-nowrap">
               {{ d.new_customer?.country }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              <a
+                :href="d.new_customer?.social_media_id"
+                target="_blank"
+                class="text-blue-600 underline hover:text-blue-800"
+              >
+                {{ d.new_customer?.social_media_id }}
+              </a>
             </td>
             <td class="px-4 py-3">{{ d.new_customer?.tour_packages }}</td>
             <td class="px-4 py-3 whitespace-nowrap">
@@ -831,28 +925,24 @@ const cancelEdit = () => {
             <td class="px-4 py-3 whitespace-nowrap">
               {{ d.new_customer?.check_out }}
             </td>
-
             <td class="px-4 py-3">{{ d.new_customer?.hotel }}</td>
             <td class="px-4 py-3">{{ d.handler }}</td>
             <td class="px-4 py-3">{{ d.link_drive }}</td>
             <td class="px-4 py-3">{{ d.total_pax }}</td>
             <td class="px-4 py-3">{{ d.activity }}</td>
             <td class="px-4 py-3">{{ d.payment_status }}</td>
+            <td>{{ d.new_customer.notes }}</td>
 
-            <!-- ACTIONS (Icons) -->
             <td class="px-4 py-3 whitespace-nowrap">
               <div class="flex items-center gap-2">
-                <!-- Edit -->
                 <button
                   @click="editDeal(d)"
                   class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
                 >
                   <Pencil class="w-4 h-4 text-orange-500" />
                 </button>
-
-                <!-- Delete -->
                 <button
-                  @click="deleteDeal(d.id)"
+                  @click="openDeleteModal(d.id)"
                   class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
@@ -863,6 +953,25 @@ const cancelEdit = () => {
         </tbody>
       </table>
     </div>
+
+    <!-- Modal delete -->
+    <ConfirmModal
+      :show="showDeleteModal"
+      title="Hapus Data"
+      message="Apakah Anda yakin ingin menghapus data ini?"
+      cancelText="Tidak"
+      confirmText="Ya"
+      @cancel="showDeleteModal = false"
+      @confirm="confirmDelete"
+    />
+
+    <!-- Pagination -->
+    <TablePagination
+      :current-page="currentPage"
+      :total-items="totalItems"
+      :page-size="pageSize"
+      @update:page="(page) => (currentPage = page)"
+    />
   </div>
 </template>
 

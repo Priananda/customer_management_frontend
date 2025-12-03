@@ -1,30 +1,37 @@
-<!-- AdminDashboard.vue -->
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import Sidebar from "../components/Sidebar.vue";
 import Header from "../components/Header.vue";
 import LoadingSpinner from "../components/Loading.vue";
 import { useAuthStore } from "../stores/auth";
 import { useLogout } from "../composables/useLogout";
 
-// Ambil store auth
+// Store auth
 const auth = useAuthStore();
-
-// Reactive user dan role dari Pinia store
 const user = computed(() => auth.user);
 const role = computed(() => auth.role);
 
-// Logout
+// Logout composable
 const { logout } = useLogout();
 
 // Sidebar collapsed state
-const collapsed = ref(false);
+const collapsed = ref(true);
 const loading = ref(false);
+
+// Cek status sidebar di localStorage
+onMounted(() => {
+  const saved = sessionStorage.getItem("sidebar-collapsed");
+  collapsed.value = saved ? saved === "true" : true; // default tertutup
+});
+
+watch(collapsed, (val) => {
+  sessionStorage.setItem("sidebar-collapsed", val);
+});
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-gray-50">
-    <!-- SIDEBAR -->
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
     <Sidebar
       v-if="user"
       :user="user"
@@ -35,7 +42,7 @@ const loading = ref(false);
       @loading-start="loading = true"
     />
 
-    <!-- MAIN CONTENT -->
+    <!-- Main content -->
     <div
       class="flex-1 flex flex-col transition-all duration-300"
       :class="collapsed ? 'ml-0' : 'ml-64'"
@@ -46,12 +53,15 @@ const loading = ref(false);
         :role="role"
         @toggleSidebar="collapsed = !collapsed"
       />
-      <main class="p-6 flex-1 overflow-auto hidden-scroll">
+
+      <main
+        class="p-0 md:p-6 lg:p-6 flex-1 overflow-auto hidden-scroll bg-blue-50/60"
+      >
         <router-view />
       </main>
     </div>
 
-    <!-- Loading Spinner -->
+    <!-- Loading spinner -->
     <LoadingSpinner v-if="loading" />
   </div>
 </template>

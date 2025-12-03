@@ -6,6 +6,7 @@ import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
 
+// State
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -71,7 +72,9 @@ const login = async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-black px-1">
+  <div
+    class="container mx-auto flex items-center justify-center min-h-screen bg-black px-2"
+  >
     <!-- Modal -->
     <transition name="modal-fade">
       <div
@@ -138,7 +141,6 @@ const login = async () => {
           class="w-full px-5 py-3 pr-12 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
 
-        <!-- Icon Mata -->
         <button
           type="button"
           @click="showPassword = !showPassword"
@@ -173,10 +175,12 @@ const login = async () => {
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;
 }
+
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
 }
+
 .modal-fade-enter-to,
 .modal-fade-leave-from {
   opacity: 1;
@@ -186,11 +190,13 @@ const login = async () => {
 .modal-scale-leave-active {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
+
 .modal-scale-enter-from,
 .modal-scale-leave-to {
   transform: scale(0.9);
   opacity: 0;
 }
+
 .modal-scale-enter-to,
 .modal-scale-leave-from {
   transform: scale(1);

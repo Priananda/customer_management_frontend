@@ -4,28 +4,26 @@ export function authGuard(to, from) {
   const auth = useAuthStore();
   const user = auth.user;
 
-  // USER BELUM LOGIN
+  // Conditional for user 
   if (!user) {
-    // Route untuk PIC atau STAFF
+
     if (to.meta.allowedRoles?.includes("pic") || to.meta.allowedRoles?.includes("staff")) {
       return { path: "/login-pic-staff" };
     }
 
-    // Route untuk ADMIN
     if (to.meta.allowedRoles?.includes("admin")) {
       return { path: "/login-admin" };
     }
 
-    // Route untuk SUPER ADMIN
     if (to.meta.allowedRoles?.includes("super_admin")) {
       return { path: "/login-super-admin" };
     }
 
-    // fallback
+    // Fallback
     return { path: "/login-pic-staff" };
   }
 
-  // User sudah login, cek role
+  // User is logged in, check role
   const role = user.role;
 
   if (to.meta.allowedRoles && !to.meta.allowedRoles.includes(role)) {
@@ -33,5 +31,6 @@ export function authGuard(to, from) {
     return false;
   }
 
-  return true; // Jika role cocok, lanjutkan
+  // If role matches, continue
+  return true; 
 }

@@ -3,63 +3,45 @@ import api from "../api/api";
 import router from "../router";
 
 export const useAuthStore = defineStore("auth", {
+  id: "auth",
   state: () => ({
-    user: null,
-    accessToken: null,
-    refreshToken: null,
+    user: null,          // only user can persist
+    accessToken: null,   // only in memory
+    refreshToken: null,  // only in memory
   }),
 
   getters: {
     isAuthenticated: (state) => !!state.accessToken,
     role: (state) => state.user?.role || null,
-    userName: (state) => state.user?.name || null,
   },
 
   actions: {
     async login(credentials) {
-      try {
-        const res = await api.post("/login", credentials);
+      const res = await api.post("/login", credentials);
 
-        this.user = res.data.user;
-        this.accessToken = res.data.access_token;
-        this.refreshToken = res.data.refresh_token;
+      this.user = res.data.user;
+      this.accessToken = res.data.access_token;
+      this.refreshToken = res.data.refresh_token;
 
-        // Set token di axios
-        api.defaults.headers.common["Authorization"] = `Bearer ${this.accessToken}`;
-
-        // Redirect sesuai role
-        switch (this.user.role) {
-          case "pic":
-          case "staff":
-            router.push("/dashboard/home");
-            break;
-          case "admin":
-            router.push("/dashboard/home");
-            break;
-          case "super_admin":
-            router.push("/dashboard/home");
-            break;
-        }
-      } catch (err) {
-        console.error(err);
-        throw err;
-      }
+      api.defaults.headers.common["Authorization"] = `Bearer ${this.accessToken}`;
+      router.push("/dashboard/home");
     },
 
+    // Logout
     async logout() {
       try {
         await api.post("/logout");
-      } catch (err) {
-        console.warn("Logout error:", err);
-      }
+      } catch {}
+      
+      // Reset all state
+      this.$reset();
 
-      this.user = null;
-      this.accessToken = null;
-      this.refreshToken = null;
+      // Delete data persist
+      sessionStorage.removeItem("auth");
 
+      // Delete header Authorization
       delete api.defaults.headers.common["Authorization"];
 
-      // Redirect ke login sesuai role
       router.push("/login-pic-staff");
     },
 
@@ -70,9 +52,10 @@ export const useAuthStore = defineStore("auth", {
         const res = await api.post("/refresh", { refresh_token: this.refreshToken });
         this.accessToken = res.data.access_token;
         api.defaults.headers.common["Authorization"] = `Bearer ${this.accessToken}`;
-      } catch (err) {
-        console.error("Refresh token failed:", err);
-        this.logout();
+      } catch {
+
+        // if refresh fails, logout automatically
+        await this.logout(); 
       }
     },
 
@@ -80,5 +63,14 @@ export const useAuthStore = defineStore("auth", {
       this.user = userData;
     },
   },
-    persist: true,
+
+  persist: [
+    {
+      key: "auth",
+      storage: sessionStorage,
+
+      // only saved users
+      paths: ["user"], 
+    },
+  ],
 });

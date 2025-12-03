@@ -11,21 +11,18 @@ import {
   XCircle,
   Download,
 } from "lucide-vue-next";
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import TablePagination from "../components/TablePagination.vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth";
 
-// Ambil auth store
 const authStore = useAuthStore();
 
-// Set token axios dari Pinia
 if (authStore.accessToken) {
   api.defaults.headers.common[
     "Authorization"
   ] = `Bearer ${authStore.accessToken}`;
 }
-
-// Ambil role dari store
 const role = authStore.role;
 
 // State
@@ -37,7 +34,15 @@ const newCustomers = ref([]);
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
 
-// Summary State
+// loading tabel
+const loading = ref(false);
+
+// Pagination
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalItems = ref(0);
+
+// Summary
 const summary = ref({
   total: 0,
   onProgress: 0,
@@ -46,8 +51,8 @@ const summary = ref({
   todayCount: 0,
 });
 
-// Fetch Customers
 const getNewCustomers = async () => {
+  loading.value = true;
   try {
     const res = await api.get("/new-customer");
     newCustomers.value = res.data.data.map((c) => ({
@@ -65,42 +70,34 @@ const getNewCustomers = async () => {
       check_in: c.check_in ?? "",
       check_out: c.check_out ?? "",
       hotel: c.hotel ?? "",
+
+      deal: {
+        handler: c.deal?.handler ?? "",
+        link_drive: c.deal?.link_drive ?? "",
+        total_pax: c.deal?.total_pax ?? "",
+        activity: c.deal?.activity ?? "",
+        payment_status: c.deal?.payment_status ?? "",
+      },
+
       notes: c.notes ?? "",
     }));
+    totalItems.value = newCustomers.value.length;
   } catch (err) {
     console.error("Error fetching customers:", err);
+  } finally {
+    loading.value = false;
   }
 };
 
-// Fetch Summary
 const getSummary = async () => {
   try {
     const res = await api.get("/new-customer/summary");
     summary.value = res.data.data;
   } catch (err) {
-    console.error("Error fetching summary:", err);
+    console.error(err);
   }
 };
 
-// Download CSV Today
-const downloadCsv = () => {
-  window.open(`${api.defaults.baseURL}/new-customer/export-csv`, "_blank");
-};
-
-// On Mounted
-onMounted(() => {
-  if (["admin", "super_admin", "pic", "staff"].includes(role)) {
-    getNewCustomers();
-    getSummary();
-  }
-  document.addEventListener("click", handleClickOutside);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("click", handleClickOutside);
-});
-
-// Search & Filter
 const filteredCustomers = computed(() => {
   return newCustomers.value.filter((c) => {
     const keyword = searchKeyword.value.toLowerCase();
@@ -121,6 +118,12 @@ const filteredCustomers = computed(() => {
       c.hotel.toLowerCase().includes(keyword) ||
       c.notes.toLowerCase().includes(keyword);
 
+    c.deal?.handler;
+    c.deal?.link_drive;
+    c.deal?.total_pax;
+    c.deal?.activity;
+    c.deal?.payment_status;
+
     const matchesDate = filterDate.value ? c.date === filterDate.value : true;
     const matchesProgress =
       filterProgress.value !== "all"
@@ -133,6 +136,19 @@ const filteredCustomers = computed(() => {
 
     return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
   });
+});
+
+// Paginated filtered data
+const paginatedDataCustomers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  totalItems.value = filteredCustomers.value.length; // update totalItems sesuai filter
+  return filteredCustomers.value.slice(start, end);
+});
+
+// Watch filters/search supaya reset halaman
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
+  currentPage.value = 1;
 });
 
 // Unique Segmen
@@ -152,7 +168,30 @@ const resetFilters = () => {
   selectedSegmen.value = "all";
 };
 
-// Current Date
+// Dropdown & badge helpers
+function handleClickOutside(e) {
+  const progress = document.getElementById("progress-dropdown");
+  const segmen = document.getElementById("segmen-dropdown");
+
+  if (progress && !progress.contains(e.target))
+    showProgressDropdown.value = false;
+  if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
+}
+function closeAllDropdowns() {
+  showProgressDropdown.value = false;
+  showSegmenDropdown.value = false;
+}
+const progressColor = (progress) => {
+  const p = (progress || "").toLowerCase();
+  if (p === "deal")
+    return "bg-green-100 text-green-800 border border-green-200";
+  if (p === "on progress")
+    return "bg-blue-100 text-blue-800 border border-blue-200";
+  if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+};
+
+// Current date
 const currentDate = computed(() => {
   const today = new Date();
   return today.toLocaleDateString("id-ID", {
@@ -163,37 +202,26 @@ const currentDate = computed(() => {
   });
 });
 
-// Badge class
-const progressClass = (progress) => {
-  const p = (progress || "").toLowerCase();
-  if (p === "deal")
-    return "bg-green-100 text-green-800 border border-green-200";
-  if (p === "on progress")
-    return "bg-blue-100 text-blue-800 border border-blue-200";
-  if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
-  return "bg-slate-100 text-slate-700 border border-slate-200";
+// On mounted
+onMounted(() => {
+  if (["admin", "super_admin", "pic", "staff"].includes(role)) {
+    getNewCustomers();
+    getSummary();
+  }
+  document.addEventListener("click", handleClickOutside);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
+
+// Download CSV
+const downloadCsv = () => {
+  window.open(`${api.defaults.baseURL}/new-customer/export-csv`, "_blank");
 };
-
-// Dropdown click outside
-function handleClickOutside(e) {
-  const progress = document.getElementById("progress-dropdown");
-  const segmen = document.getElementById("segmen-dropdown");
-
-  if (progress && !progress.contains(e.target))
-    showProgressDropdown.value = false;
-  if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
-}
-
-// Close all dropdowns on input focus
-function closeAllDropdowns() {
-  showProgressDropdown.value = false;
-  showSegmenDropdown.value = false;
-}
 </script>
 
 <template>
-  <div class="p-4 max-w-6xl mx-auto">
-    <!-- TITLE -->
+  <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
     <h2
       class="text-2xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
@@ -203,13 +231,12 @@ function closeAllDropdowns() {
       See all deal, new customer, new chat, and summary report
     </p>
 
-    <!-- DATE SECTION -->
     <div class="mb-6">
       <p class="text-xl font-semibold mb-1 text-slate-800">{{ currentDate }}</p>
       <p class="text-md text-slate-600">Daily performance overview</p>
     </div>
 
-    <!-- SUMMARY CARDS -->
+    <!-- Summary -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <!-- Total Customers -->
       <div
@@ -255,7 +282,7 @@ function closeAllDropdowns() {
         <p class="text-sm text-slate-500">Canceled orders</p>
       </div>
 
-      <!-- Download Today Report -->
+      <!-- Download -->
       <div
         class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center justify-center gap-2"
       >
@@ -270,7 +297,7 @@ function closeAllDropdowns() {
       </div>
     </div>
 
-    <!-- FILTERS MODERN -->
+    <!-- Filter -->
     <div
       class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
     >
@@ -382,7 +409,7 @@ function closeAllDropdowns() {
         <transition name="dropdown">
           <div
             v-if="showSegmenDropdown"
-            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -419,37 +446,62 @@ function closeAllDropdowns() {
       </button>
     </div>
 
-    <!-- TABLE -->
+    <!-- Table -->
     <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
       <table
         class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
       >
         <thead class="bg-blue-900 text-white">
           <tr>
+            <th class="px-4 py-3 text-left">No</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[12%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[14%]">Name</th>
+            <th class="px-4 py-3 text-left w-[14%]">Customer Name</th>
             <th class="px-4 py-3 text-left w-[10%]">Progress</th>
             <th class="px-4 py-3 text-left w-[10%]">PIC</th>
             <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
             <th class="px-4 py-3 text-left w-[6%]">Via</th>
             <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[8%]">SM ID</th>
+            <th class="px-4 py-3 text-left w-[8%]">Social Media</th>
             <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
             <th class="px-4 py-3 text-left w-[8%]">Check In</th>
             <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
             <th class="px-4 py-3 text-left w-[8%]">Hotel</th>
+            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
+            <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
+            <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
+            <th class="px-4 py-3 text-left w-[10%]">Activity</th>
+            <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
             <th class="px-4 py-3 text-left w-[12%]">Notes</th>
           </tr>
         </thead>
 
         <tbody>
+          <tr v-if="loading">
+            <td colspan="15" class="p-4">
+              <div class="space-y-2">
+                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
+              </div>
+            </td>
+          </tr>
+
+          <tr v-else-if="!loading && filteredCustomers.length === 0">
+            <td
+              colspan="15"
+              class="text-center p-4 text-gray-800 font-semibold"
+            >
+              Data tidak ditemukan
+            </td>
+          </tr>
+
           <tr
-            v-for="c in filteredCustomers"
+            v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
-            <!-- gunakan align-middle supaya semua cell rata vertikal -->
+            <td class="px-4 py-2">{{ i + 1 }}</td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               {{ c.date }}
             </td>
@@ -462,7 +514,7 @@ function closeAllDropdowns() {
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-24',
-                  progressClass(c.progress),
+                  progressColor(c.progress),
                 ]"
               >
                 {{ c.progress }}
@@ -480,8 +532,15 @@ function closeAllDropdowns() {
               {{ c.country }}
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.social_media_id }}
+              <a
+                :href="c.social_media_id"
+                target="_blank"
+                class="text-blue-600 underline hover:text-blue-800"
+              >
+                {{ c.social_media_id }}
+              </a>
             </td>
+
             <td class="px-4 py-3 align-middle text-left">
               {{ c.tour_packages }}
             </td>
@@ -492,11 +551,25 @@ function closeAllDropdowns() {
               {{ c.check_out }}
             </td>
             <td class="px-4 py-3 align-middle text-left">{{ c.hotel }}</td>
+
+            <td>{{ c.deal?.handler }}</td>
+            <td>{{ c.deal?.link_drive }}</td>
+            <td>{{ c.deal?.total_pax }}</td>
+            <td>{{ c.deal?.activity }}</td>
+            <td>{{ c.deal?.payment_status }}</td>
+
             <td class="px-4 py-3 align-middle text-left">{{ c.notes }}</td>
           </tr>
         </tbody>
       </table>
     </div>
+    <!-- Pagination -->
+    <TablePagination
+      :current-page="currentPage"
+      :total-items="totalItems"
+      :page-size="pageSize"
+      @update:page="(page) => (currentPage = page)"
+    />
   </div>
 </template>
 

@@ -5,6 +5,7 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
 });
 
+// Request interceptor untuk menambahkan accessToken
 api.interceptors.request.use((config) => {
   const auth = useAuthStore();
   if (auth.accessToken) {
@@ -13,6 +14,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Response interceptor untuk refresh token otomatis
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -24,7 +26,6 @@ api.interceptors.response.use(
 
       try {
         await auth.refreshAccessToken();
-
         originalRequest.headers.Authorization = `Bearer ${auth.accessToken}`;
         return api(originalRequest);
       } catch (err) {

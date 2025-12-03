@@ -8,6 +8,7 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 const auth = useAuthStore();
 
+// State
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -38,7 +39,6 @@ const login = async () => {
   modalMsg.value = "";
   modalType.value = "";
 
-  // Validasi input
   if (!email.value) emailError.value = "Email wajib diisi!";
   else if (!validateEmail(email.value)) emailError.value = "Email tidak valid!";
 
@@ -53,13 +53,11 @@ const login = async () => {
   }
 
   try {
-    // Login via Pinia auth store
     await auth.login({
       email: email.value,
       password: password.value,
     });
 
-    // Pastikan role adalah admin
     if (auth.role !== "admin") {
       passwordError.value = "Hanya Admin yang bisa login di halaman ini";
       modalMsg.value = "Login gagal!";
@@ -89,7 +87,9 @@ const login = async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-black px-1">
+  <div
+    class="container mx-auto flex items-center justify-center min-h-screen bg-black px-2"
+  >
     <!-- Modal -->
     <transition name="modal-fade">
       <div
@@ -177,10 +177,12 @@ const login = async () => {
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;
 }
+
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
 }
+
 .modal-fade-enter-to,
 .modal-fade-leave-from {
   opacity: 1;
@@ -190,11 +192,13 @@ const login = async () => {
 .modal-scale-leave-active {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
+
 .modal-scale-enter-from,
 .modal-scale-leave-to {
   transform: scale(0.9);
   opacity: 0;
 }
+
 .modal-scale-enter-to,
 .modal-scale-leave-from {
   transform: scale(1);

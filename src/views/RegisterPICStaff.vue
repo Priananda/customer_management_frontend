@@ -7,28 +7,25 @@ import { Eye, EyeOff, ChevronDown } from "lucide-vue-next";
 
 const router = useRouter();
 
-// Form fields
+// State
 const name = ref("");
 const email = ref("");
 const password = ref("");
-const role = ref("PIC"); // default role tampil di dropdown
+const role = ref("PIC");
 
-// UI state
 const showPassword = ref(false);
 const loading = ref(false);
-const showRoleDropdown = ref(false); // toggle dropdown
+const showRoleDropdown = ref(false);
 
-// Modal
 const showModal = ref(false);
 const modalMsg = ref("");
 const modalType = ref("");
 
-// Errors
 const nameError = ref("");
 const emailError = ref("");
 const passwordError = ref("");
 
-const roles = ["PIC", "Staff"]; // isi dropdown
+const roles = ["PIC", "Staff"];
 
 const register = async () => {
   // Reset errors
@@ -144,7 +141,7 @@ const register = async () => {
           </p>
         </div>
 
-        <!-- Password (full width) -->
+        <!-- Password  -->
         <div class="relative md:col-span-2">
           <label class="block text-gray-300 font-medium mb-2">Password</label>
           <input
@@ -165,7 +162,7 @@ const register = async () => {
           </p>
         </div>
 
-        <!-- Role dropdown (full width) -->
+        <!-- Role dropdown -->
         <div class="relative md:col-span-2">
           <label class="block text-gray-300 font-medium mb-2">Role</label>
           <button
@@ -212,6 +209,15 @@ const register = async () => {
         <LoadingSpinner v-if="loading" class="h-5 w-5" />
         <span>{{ loading ? "Memproses..." : "Register" }}</span>
       </button>
+      <!-- Link ke Register -->
+      <div class="mt-4 text-center">
+        <RouterLink
+          to="/login-pic-staff"
+          class="text-cyan-400 hover:text-cyan-300 underline text-sm transition"
+        >
+          Sudah punya akun? Login
+        </RouterLink>
+      </div>
     </div>
   </div>
 
@@ -223,6 +229,7 @@ const register = async () => {
 .modal-fade-leave-active {
   transition: opacity 0.3s;
 }
+
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
@@ -232,21 +239,23 @@ const register = async () => {
 .modal-scale-leave-active {
   transition: transform 0.3s;
 }
+
 .modal-scale-enter-from,
 .modal-scale-leave-to {
   transform: scale(0.9);
 }
 
-/* Dropdown animation */
 .dropdown-fade-enter-active,
 .dropdown-fade-leave-active {
   transition: all 0.2s ease;
 }
+
 .dropdown-fade-enter-from,
 .dropdown-fade-leave-to {
   opacity: 0;
   transform: translateY(-5px);
 }
+
 .dropdown-fade-enter-to,
 .dropdown-fade-leave-from {
   opacity: 1;

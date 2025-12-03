@@ -8,6 +8,7 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 const auth = useAuthStore();
 
+// State
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
@@ -20,7 +21,7 @@ const loading = ref(false);
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-// Reset saat halaman mount
+// Reset all page
 onMounted(() => {
   email.value = "";
   password.value = "";
@@ -34,7 +35,7 @@ onMounted(() => {
 const login = async () => {
   loading.value = true;
 
-  // Reset error dan modal
+  // Reset error and modal
   emailError.value = "";
   passwordError.value = "";
   modalMsg.value = "";
@@ -55,13 +56,12 @@ const login = async () => {
   }
 
   try {
-    // Login via Pinia auth store
+    // Login to Pinia auth store
     await auth.login({
       email: email.value,
       password: password.value,
     });
 
-    // Pastikan role adalah pic atau staff
     if (!["pic", "staff"].includes(auth.role)) {
       passwordError.value = "Hanya PIC / Staff yang bisa login di halaman ini";
       modalMsg.value = "Login gagal!";
@@ -80,10 +80,7 @@ const login = async () => {
       router.push("/dashboard/home");
     }, 1500);
   } catch (err) {
-    // Selalu tampilkan pesan custom
     modalMsg.value = "Harap masukan email dan password dengan benar";
-
-    // Optional: jika mau, bisa log server message ke console
     console.error(err.response?.data?.message || err.message);
 
     modalType.value = "error";
@@ -95,7 +92,9 @@ const login = async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-black px-1">
+  <div
+    class="container mx-auto flex items-center justify-center min-h-screen bg-black px-2"
+  >
     <!-- Modal -->
     <transition name="modal-fade">
       <div
@@ -173,6 +172,15 @@ const login = async () => {
       >
         <span>{{ loading ? "Memproses..." : "Login" }}</span>
       </button>
+      <!-- Link ke Register -->
+      <div class="mt-4 text-center">
+        <RouterLink
+          to="/register-pic-staff"
+          class="text-cyan-400 hover:text-cyan-300 underline text-sm transition"
+        >
+          Belum punya akun? Daftar di sini
+        </RouterLink>
+      </div>
     </div>
   </div>
 
@@ -184,10 +192,12 @@ const login = async () => {
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;
 }
+
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
 }
+
 .modal-fade-enter-to,
 .modal-fade-leave-from {
   opacity: 1;
@@ -197,11 +207,13 @@ const login = async () => {
 .modal-scale-leave-active {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
+
 .modal-scale-enter-from,
 .modal-scale-leave-to {
   transform: scale(0.9);
   opacity: 0;
 }
+
 .modal-scale-enter-to,
 .modal-scale-leave-from {
   transform: scale(1);

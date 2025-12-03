@@ -10,11 +10,12 @@ import DealCustomer from '../views/DealCustomer.vue';
 import ViewDataPIC from '../views/ViewDataPIC.vue';
 import ViewDataStaff from '../views/ViewDataStaff.vue';
 import ViewDataAdmin from '../views/ViewDataAdmin.vue';
+import UploadCSV from '../views/UploadCSV.vue';
 
 import { authGuard } from './middleware.js';
 
 const routes = [
-  // Public routes
+  // Public route
   { path: '/register-pic-staff', component: RegisterPICStaff },
   { path: '/login-pic-staff', component: LoginPICStaff },
   { path: '/login-admin', component: LoginAdmin },
@@ -53,11 +54,17 @@ const routes = [
         component: ViewDataAdmin,
         meta: { allowedRoles: ['super_admin'] }
       },
+      //  { 
+      //   path: 'upload-csv', 
+      //   component: UploadCSV,
+      //   meta: { allowedRoles: ['pic','staff','admin','super_admin'] }
+      // },
+
       { path: '', redirect: 'new-customer' }
     ]
   },
 
-  // fallback
+  // Fallback
   { path: '/:pathMatch(.*)*', redirect: '/dashboard/home' }
 ];
 

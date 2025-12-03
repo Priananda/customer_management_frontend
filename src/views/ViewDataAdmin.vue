@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, onBeforeUnmount } from "vue";
+import { ref, onMounted, computed, onBeforeUnmount, watch } from "vue";
 import {
   Search,
   Calendar,
@@ -7,6 +7,7 @@ import {
   ChevronDown,
   RotateCcw,
 } from "lucide-vue-next";
+import TablePagination from "../components/TablePagination.vue";
 import api from "../api/api";
 
 // Data
@@ -22,6 +23,21 @@ const selectedSegmen = ref("all");
 // Dropdown visibility
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
+
+// Pagination
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalItems = ref(0);
+
+const paginatedDataCustomers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  totalItems.value = filteredCustomers.value.length;
+  return filteredCustomers.value.slice(start, end);
+});
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
+  currentPage.value = 1;
+});
 
 // Load data
 onMounted(async () => {
@@ -95,6 +111,13 @@ const downloadCSV = () => {
     "Check In",
     "Check Out",
     "Hotel",
+
+    "Handler",
+    "Link Drive",
+    "Total Pax",
+    "Activity",
+    "Payment Status",
+
     "Notes",
   ];
   const rows = filteredCustomers.value.map((c) => [
@@ -111,6 +134,13 @@ const downloadCSV = () => {
     c.check_in,
     c.check_out,
     c.hotel,
+
+    c.deal?.handler ?? "",
+    c.deal?.link_drive ?? "",
+    c.deal?.total_pax ?? "",
+    c.deal?.activity ?? "",
+    c.deal?.payment_status ?? "",
+
     c.notes,
   ]);
   const csvContent =
@@ -154,10 +184,20 @@ function selectSegmen(val) {
   selectedSegmen.value = val;
   showSegmenDropdown.value = false;
 }
+
+const progressColor = (progress) => {
+  const p = (progress || "").toLowerCase();
+  if (p === "deal")
+    return "bg-green-100 text-green-800 border border-green-200";
+  if (p === "on progress")
+    return "bg-blue-100 text-blue-800 border border-blue-200";
+  if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+};
 </script>
 
 <template>
-  <div class="p-5 max-w-6xl mx-auto">
+  <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
     <h2
       class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
@@ -165,7 +205,7 @@ function selectSegmen(val) {
     </h2>
     <p class="text-md mb-6 text-slate-600">Manage new customers efficiently.</p>
 
-    <!-- FILTERS -->
+    <!-- Filter -->
     <div
       class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
     >
@@ -244,7 +284,7 @@ function selectSegmen(val) {
         <transition name="dropdown">
           <div
             v-if="showSegmenDropdown"
-            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -288,26 +328,37 @@ function selectSegmen(val) {
       >
         <thead class="bg-blue-900 text-white">
           <tr>
-            <th class="px-4 py-3 text-left">NO</th>
-            <th class="px-4 py-3 text-left">Date</th>
-            <th class="px-4 py-3 text-left">Name</th>
-            <th class="px-4 py-3 text-left">Phone</th>
-            <th class="px-4 py-3 text-left">PIC</th>
-            <th class="px-4 py-3 text-left">Progress</th>
-            <th class="px-4 py-3 text-left">Segmen</th>
-            <th class="px-4 py-3 text-left">Via</th>
-            <th class="px-4 py-3 text-left">Country</th>
-            <th class="px-4 py-3 text-left">Social Media</th>
-            <th class="px-4 py-3 text-left">Tour Package</th>
-            <th class="px-4 py-3 text-left">Check In</th>
-            <th class="px-4 py-3 text-left">Check Out</th>
-            <th class="px-4 py-3 text-left">Hotel</th>
-            <th class="px-4 py-3 text-left">Notes</th>
+            <th class="px-4 py-3 text-left">No</th>
+            <th class="px-4 py-3 text-left w-[10%]">Date</th>
+            <th class="px-4 py-3 text-left w-[12%]">Phone</th>
+            <th class="px-4 py-3 text-left w-[14%]">Customer Name</th>
+            <th class="px-4 py-3 text-left w-[10%]">Progress</th>
+            <th class="px-4 py-3 text-left w-[10%]">PIC</th>
+            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
+            <th class="px-4 py-3 text-left w-[6%]">Via</th>
+            <th class="px-4 py-3 text-left w-[8%]">Country</th>
+            <th class="px-4 py-3 text-left w-[8%]">Social Media</th>
+            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
+            <th class="px-4 py-3 text-left w-[8%]">Check In</th>
+            <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
+            <th class="px-4 py-3 text-left w-[8%]">Hotel</th>
+            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
+            <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
+            <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
+            <th class="px-4 py-3 text-left w-[10%]">Activity</th>
+            <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
+            <th class="px-4 py-3 text-left w-[12%]">Notes</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="15" class="text-center p-4">Loading...</td>
+            <td colspan="15" class="p-4">
+              <div class="space-y-2">
+                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
+              </div>
+            </td>
           </tr>
           <tr v-else-if="!loading && filteredCustomers.length === 0">
             <td
@@ -318,29 +369,79 @@ function selectSegmen(val) {
             </td>
           </tr>
           <tr
-            v-for="(c, i) in filteredCustomers"
+            v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
             class="border-b border-slate-200 hover:bg-blue-50"
           >
             <td class="px-4 py-2">{{ i + 1 }}</td>
-            <td class="px-4 py-2">{{ c.date }}</td>
-            <td class="px-4 py-2">{{ c.name }}</td>
-            <td class="px-4 py-2">{{ c.phone }}</td>
-            <td class="px-4 py-2">{{ c.pic }}</td>
-            <td class="px-4 py-2">{{ c.progress }}</td>
-            <td class="px-4 py-2">{{ c.segmen }}</td>
-            <td class="px-4 py-2">{{ c.via }}</td>
-            <td class="px-4 py-2">{{ c.country }}</td>
-            <td class="px-4 py-2">{{ c.social_media_id }}</td>
-            <td class="px-4 py-2">{{ c.tour_packages }}</td>
-            <td class="px-4 py-2">{{ c.check_in }}</td>
-            <td class="px-4 py-2">{{ c.check_out }}</td>
-            <td class="px-4 py-2">{{ c.hotel }}</td>
-            <td class="px-4 py-2">{{ c.notes }}</td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.date }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.phone }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left">{{ c.name }}</td>
+
+            <td class="px-4 py-3 align-middle text-left">
+              <span
+                :class="[
+                  'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-24',
+                  progressColor(c.progress),
+                ]"
+              >
+                {{ c.progress }}
+              </span>
+            </td>
+
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.pic }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left">{{ c.segmen }}</td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.via }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.country }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              <a
+                :href="c.social_media_id"
+                target="_blank"
+                class="text-blue-600 underline hover:text-blue-800"
+              >
+                {{ c.social_media_id }}
+              </a>
+            </td>
+
+            <td class="px-4 py-3 align-middle text-left">
+              {{ c.tour_packages }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.check_in }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.check_out }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left">{{ c.hotel }}</td>
+
+            <td>{{ c.deal?.handler }}</td>
+            <td>{{ c.deal?.link_drive }}</td>
+            <td>{{ c.deal?.total_pax }}</td>
+            <td>{{ c.deal?.activity }}</td>
+            <td>{{ c.deal?.payment_status }}</td>
+
+            <td class="px-4 py-3 align-middle text-left">{{ c.notes }}</td>
           </tr>
         </tbody>
       </table>
     </div>
+    <!-- Pagination -->
+    <TablePagination
+      :current-page="currentPage"
+      :total-items="totalItems"
+      :page-size="pageSize"
+      @update:page="(page) => (currentPage = page)"
+    />
   </div>
 </template>
 
@@ -353,10 +454,12 @@ function selectSegmen(val) {
 .hidden-scroll::-webkit-scrollbar {
   display: none;
 }
+
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all 0.15s ease;
 }
+
 .dropdown-enter-from,
 .dropdown-leave-to {
   opacity: 0;

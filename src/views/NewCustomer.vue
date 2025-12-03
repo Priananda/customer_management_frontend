@@ -9,11 +9,12 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-vue-next";
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import ConfirmModal from "@/components/ConfirmModalDelete.vue";
+import TablePagination from "../components/TablePagination.vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth.js";
 
-// ----- AUTH STORE -----
 const authStore = useAuthStore();
 
 // Set token di axios
@@ -28,7 +29,7 @@ const canEdit = ["admin", "staff", "super_admin", "pic"].includes(
   authStore.user?.role || ""
 );
 
-// ----- STATE -----
+// State
 const newCustomers = ref([]);
 const summary = ref({
   total: 0,
@@ -44,7 +45,13 @@ const filterDate = ref("");
 const filterProgress = ref("all");
 const selectedSegmen = ref("all");
 
+// Pagination
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalItems = ref(0);
+
 // modal & form
+const loadingModal = ref(false);
 const showModal = ref(false);
 const editId = ref(null);
 const form = ref({
@@ -72,7 +79,10 @@ const showSegmenDropdown = ref(false);
 // loading tabel
 const loading = ref(false);
 
-// ------- API CALLS -------
+// Modal delete
+const showDeleteModal = ref(false);
+const selectedId = ref(null);
+
 const getNewCustomers = async () => {
   loading.value = true;
   try {
@@ -112,6 +122,9 @@ const getSummary = async () => {
 };
 
 const submitForm = async () => {
+  if (loadingModal.value) return;
+  loadingModal.value = true;
+
   try {
     if (editId.value) {
       await api.put(`/new-customer/${editId.value}`, form.value);
@@ -125,20 +138,21 @@ const submitForm = async () => {
   } catch (err) {
     console.error("Error submitting form:", err);
   }
+  loadingModal.value = false;
 };
 
-const deleteNewCustomer = async (id) => {
+const confirmDelete = async () => {
   try {
-    if (!confirm("Are you sure?")) return;
-    await api.delete(`/new-customer/${id}`);
+    await api.delete(`/new-customer/${selectedId.value}`);
     await getNewCustomers();
     await getSummary();
-  } catch (err) {
-    console.error("Error deleting customer:", err);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    showDeleteModal.value = false;
   }
 };
 
-// ------- FILTERS / COMPUTED -------
 const filteredCustomers = computed(() => {
   return newCustomers.value.filter((c) => {
     const keyword = (searchKeyword.value || "").toLowerCase();
@@ -181,8 +195,7 @@ const uniqueSegmens = computed(() => {
   return Array.from(seg);
 });
 
-// ------- UI Helpers -------
-const progressClass = (progress) => {
+const progressColor = (progress) => {
   const p = (progress || "").toString().toLowerCase();
   if (p === "deal")
     return "bg-green-100 text-green-800 border border-green-200";
@@ -192,7 +205,6 @@ const progressClass = (progress) => {
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
 
-// ------- MODAL / FORM HELPERS -------
 const openCreateModal = () => {
   resetForm();
   editId.value = null;
@@ -215,7 +227,6 @@ const closeModal = () => {
   resetForm();
 };
 
-// ------- DROPDOWN HELPERS -------
 function closeAllDropdowns() {
   showProgressDropdown.value = false;
   showSegmenDropdown.value = false;
@@ -246,18 +257,17 @@ function selectModalProgress(val) {
   showModalProgressDropdown.value = false;
 }
 
-// ------- CSV Download -------
 const downloadCSV = () => {
   const headers = [
     "Date",
     "Phone",
-    "Name",
+    "Customer Name",
     "Progress",
     "PIC",
     "Segmen",
     "Via",
     "Country",
-    "Social Media ID",
+    "Social Media",
     "Tour Packages",
     "Check In",
     "Check Out",
@@ -295,7 +305,6 @@ const downloadCSV = () => {
   document.body.removeChild(link);
 };
 
-// ------- CLICK OUTSIDE HANDLER -------
 function handleClickOutside(e) {
   const progress = document.getElementById("progress-dropdown");
   const segmen = document.getElementById("segmen-dropdown");
@@ -305,7 +314,6 @@ function handleClickOutside(e) {
   if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
 }
 
-// ------- LIFECYCLE -------
 onMounted(() => {
   if (canEdit) {
     getNewCustomers();
@@ -320,18 +328,32 @@ onBeforeUnmount(() => {
 
 const progressOptions = ["on progress", "deal", "canceled"];
 
-// Reset semua filter
+// Reset all filter
 function resetFilters() {
   searchKeyword.value = "";
   filterDate.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
 }
+
+const paginatedDataCustomers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  totalItems.value = filteredCustomers.value.length;
+  return filteredCustomers.value.slice(start, end);
+});
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
+  currentPage.value = 1;
+});
+
+const openDeleteModal = (id) => {
+  selectedId.value = id;
+  showDeleteModal.value = true;
+};
 </script>
 
 <template>
-  <div class="p-5 max-w-6xl mx-auto">
-    <!-- TITLE -->
+  <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
     <h2
       class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
@@ -341,7 +363,7 @@ function resetFilters() {
       See all deal, new customer, new chat, and summary report
     </p>
 
-    <!-- FILTERS & ACTIONS -->
+    <!-- Filter -->
     <div
       class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
     >
@@ -434,7 +456,7 @@ function resetFilters() {
         <transition name="dropdown">
           <div
             v-if="showSegmenDropdown"
-            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -460,7 +482,7 @@ function resetFilters() {
           @click="openCreateModal"
           class="w-full bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 rounded-lg"
         >
-          Add Customer
+          Add New Customer
         </button>
       </div>
 
@@ -488,15 +510,16 @@ function resetFilters() {
       >
         <thead class="bg-blue-900 text-white">
           <tr>
+            <th class="px-4 py-3 text-left">No</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[12%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[14%]">Name</th>
+            <th class="px-4 py-3 text-left w-[14%]">Customer Name</th>
             <th class="px-4 py-3 text-left w-[10%]">Progress</th>
             <th class="px-4 py-3 text-left w-[10%]">PIC</th>
             <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
             <th class="px-4 py-3 text-left w-[6%]">Via</th>
             <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[8%]">SM ID</th>
+            <th class="px-4 py-3 text-left w-[8%]">Social Media</th>
             <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
             <th class="px-4 py-3 text-left w-[8%]">Check In</th>
             <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
@@ -508,7 +531,13 @@ function resetFilters() {
 
         <tbody>
           <tr v-if="loading">
-            <td colspan="15" class="text-center p-4">Loading...</td>
+            <td colspan="15" class="p-4">
+              <div class="space-y-2">
+                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
+                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
+              </div>
+            </td>
           </tr>
           <tr v-else-if="!loading && filteredCustomers.length === 0">
             <td
@@ -519,10 +548,11 @@ function resetFilters() {
             </td>
           </tr>
           <tr
-            v-for="c in filteredCustomers"
+            v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
+            <td class="px-4 py-2">{{ i + 1 }}</td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               {{ c.date }}
             </td>
@@ -534,7 +564,7 @@ function resetFilters() {
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-28',
-                  progressClass(c.progress),
+                  progressColor(c.progress),
                 ]"
                 >{{ c.progress }}</span
               >
@@ -550,8 +580,15 @@ function resetFilters() {
               {{ c.country }}
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.social_media_id }}
+              <a
+                :href="c.social_media_id"
+                target="_blank"
+                class="text-blue-600 underline hover:text-blue-800"
+              >
+                {{ c.social_media_id }}
+              </a>
             </td>
+
             <td class="px-4 py-3 align-middle text-left">
               {{ c.tour_packages }}
             </td>
@@ -577,7 +614,7 @@ function resetFilters() {
                 <!-- Button Delete -->
                 <button
                   v-if="canEdit"
-                  @click="deleteNewCustomer(c.id)"
+                  @click="openDeleteModal(c.id)"
                   class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
@@ -589,23 +626,39 @@ function resetFilters() {
       </table>
     </div>
 
-    <!-- MODAL (Create / Edit) -->
+    <!-- Modal delete -->
+    <ConfirmModal
+      :show="showDeleteModal"
+      title="Hapus Data"
+      message="Apakah Anda yakin ingin menghapus data ini?"
+      cancelText="Tidak"
+      confirmText="Ya"
+      @cancel="showDeleteModal = false"
+      @confirm="confirmDelete"
+    />
+
+    <!-- Pagination -->
+    <TablePagination
+      :current-page="currentPage"
+      :total-items="totalItems"
+      :page-size="pageSize"
+      @update:page="(page) => (currentPage = page)"
+    />
+
+    <!-- MODAL -->
     <transition name="modal">
       <div
         v-if="showModal"
         class="fixed inset-0 z-50 flex items-center justify-center"
       >
-        <!-- Overlay -->
         <div
           class="absolute inset-0 bg-black/50 backdrop-blur-sm"
           @click="closeModal"
         ></div>
 
-        <!-- Modal -->
         <div
           class="relative bg-white rounded-xl w-full max-w-3xl mx-4 shadow-xl overflow-hidden"
         >
-          <!-- Header -->
           <div
             class="sticky top-0 bg-white px-6 py-4 flex items-center justify-between z-10"
           >
@@ -621,147 +674,272 @@ function resetFilters() {
             </button>
           </div>
 
-          <!-- Body -->
           <div class="max-h-[70vh] overflow-y-auto px-6 py-4 hidden-scroll">
             <form @submit.prevent="submitForm" class="grid grid-cols-2 gap-4">
-              <input
-                v-model="form.date"
-                type="date"
-                placeholder="Date"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.phone"
-                placeholder="Phone"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.name"
-                placeholder="Customer Name"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <!-- PROGRESS DROPDOWN -->
-              <div class="relative">
-                <!-- Input Display -->
+              <template v-if="loadingModal">
                 <div
-                  @click="
-                    showModalProgressDropdown = !showModalProgressDropdown
-                  "
-                  class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none focus:outline-none flex items-center justify-between"
-                >
-                  <span class="text-slate-700">
-                    {{ form.progress || "Select progress" }}
-                  </span>
+                  v-for="n in 14"
+                  :key="'skeleton-' + n"
+                  class="h-12 bg-slate-200 rounded animate-pulse"
+                ></div>
 
-                  <!-- ICON BERUBAH -->
-                  <ChevronRight
-                    class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
-                    :class="
-                      showModalProgressDropdown ? 'rotate-90' : 'rotate-0'
-                    "
+                <div
+                  class="col-span-2 h-24 bg-slate-200 rounded animate-pulse"
+                ></div>
+              </template>
+              <template v-else>
+                <div class="flex flex-col">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Date
+                    <span class="text-red-500">*</span>
+                  </label>
+
+                  <input
+                    v-model="form.date"
+                    type="date"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
                   />
                 </div>
 
-                <!-- Dropdown List -->
-                <transition
-                  enter-active-class="transition duration-200 ease-out"
-                  enter-from-class="opacity-0 -translate-y-2"
-                  enter-to-class="opacity-100 translate-y-0"
-                  leave-active-class="transition duration-150 ease-in"
-                  leave-from-class="opacity-100 translate-y-0"
-                  leave-to-class="opacity-0 -translate-y-2"
-                >
-                  <ul
-                    v-if="showModalProgressDropdown"
-                    class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    <li
-                      v-for="option in progressOptions"
-                      :key="option"
-                      @click="selectModalProgress(option)"
-                      class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700"
+                    Phone
+                    <span class="text-red-500">*</span>
+                  </label>
+
+                  <input
+                    v-model="form.phone"
+                    placeholder="Phone"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Customer Name
+                    <span class="text-red-500">*</span>
+                  </label>
+
+                  <input
+                    v-model="form.name"
+                    placeholder="Customer Name"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Progress
+                    <span class="text-red-500">*</span>
+                  </label>
+
+                  <!-- Progress -->
+                  <div class="relative">
+                    <div
+                      @click="
+                        showModalProgressDropdown = !showModalProgressDropdown
+                      "
+                      class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none focus:outline-none flex items-center justify-between"
                     >
-                      {{ option }}
-                    </li>
-                  </ul>
-                </transition>
+                      <span class="text-slate-700">
+                        {{ form.progress || "Select progress" }}
+                      </span>
+                      <ChevronRight
+                        class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
+                        :class="
+                          showModalProgressDropdown ? 'rotate-90' : 'rotate-0'
+                        "
+                      />
+                    </div>
+
+                    <ul
+                      v-if="showModalProgressDropdown"
+                      class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+                    >
+                      <li
+                        v-for="option in progressOptions"
+                        :key="option"
+                        @click="selectModalProgress(option)"
+                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700"
+                      >
+                        {{ option }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <!-- PIC -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    PIC <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.pic"
+                    placeholder="PIC"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Segmen -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Segmen <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.segmen"
+                    placeholder="Segmen"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Via -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Via <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.via"
+                    placeholder="Via"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Country -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Country <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.country"
+                    placeholder="Country"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Social Media -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Social Media ID <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.social_media_id"
+                    placeholder="Social Media ID"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Tour Packages -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Tour Packages <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.tour_packages"
+                    placeholder="Tour Packages"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Check In -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Check In <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.check_in"
+                    type="date"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Check Out -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Check Out <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.check_out"
+                    type="date"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Hotel -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Hotel <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.hotel"
+                    placeholder="Hotel"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+
+                <!-- Notes -->
+                <div class="flex flex-col mb-3 col-span-2">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Notes <span class="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    v-model="form.notes"
+                    class="min-h-[100px] p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                    placeholder="Notes"
+                  ></textarea>
+                </div>
+              </template>
+
+              <!-- Footer -->
+              <div class="col-span-2 flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  class="border border-blue-900 text-slate-600 hover:bg-blue-50 font-medium px-5 py-2 rounded-lg"
+                  @click="closeModal"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  class="bg-blue-900 hover:bg-blue-900/90 text-white font-medium px-4 py-2 rounded-lg flex items-center gap-2"
+                  :disabled="loadingModal"
+                >
+                  <span v-if="loadingModal" class="animate-pulse"
+                    >Loading...</span
+                  >
+                  <span v-else>
+                    {{ editId ? "Update New Customer" : "Create New Customer" }}
+                  </span>
+                </button>
               </div>
-
-              <input
-                v-model="form.pic"
-                placeholder="PIC"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.segmen"
-                placeholder="Segmen"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.via"
-                placeholder="Via"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.country"
-                placeholder="Country"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.social_media_id"
-                placeholder="Social Media ID"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.tour_packages"
-                placeholder="Tour Packages"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-              <input
-                v-model="form.check_in"
-                type="date"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                placeholder="Check In"
-              />
-              <input
-                v-model="form.check_out"
-                type="date"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                placeholder="Check Out"
-              />
-              <input
-                v-model="form.hotel"
-                placeholder="Hotel"
-                class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-              />
-
-              <textarea
-                v-model="form.notes"
-                class="col-span-2 min-h-[100px] p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                placeholder="Notes"
-              ></textarea>
             </form>
-          </div>
-
-          <!-- Footer -->
-          <div
-            class="sticky bottom-0 bg-white px-6 py-4 flex justify-end gap-3 z-10"
-          >
-            <button
-              type="button"
-              class="border border-blue-900 text-slate-600 hover:bg-blue-50 font-medium px-5 py-2 rounded-lg"
-              @click="closeModal"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              class="bg-blue-900 text-white font-medium px-4 py-2 rounded-lg"
-              @click="submitForm"
-            >
-              {{ editId ? "Update Customer" : "Create Customer" }}
-            </button>
           </div>
         </div>
       </div>
@@ -770,7 +948,6 @@ function resetFilters() {
 </template>
 
 <style scoped>
-/* layout helpers */
 .hidden-scroll {
   overflow: auto;
   scrollbar-width: none;
@@ -780,7 +957,6 @@ function resetFilters() {
   display: none;
 }
 
-/* dropdown anim */
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all 0.15s ease;
@@ -791,7 +967,6 @@ function resetFilters() {
   transform: translateY(-6px);
 }
 
-/* modal anim */
 .modal-enter-active,
 .modal-leave-active {
   transition: all 0.18s ease;
@@ -807,7 +982,6 @@ function resetFilters() {
   transform: translateY(0) scale(1);
 }
 
-/* transition for subtle slide/rotate if needed in sidebar (kept for consistency) */
 .slide-fade-enter-from,
 .slide-fade-leave-to {
   opacity: 0;
