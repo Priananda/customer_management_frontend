@@ -67,7 +67,7 @@ const form = ref({
   tour_packages: "",
   check_in: "",
   check_out: "",
-  hotel: "",
+  hotel: [""], // ubah dari string ke array
   notes: "",
 });
 
@@ -126,11 +126,18 @@ const submitForm = async () => {
   loadingModal.value = true;
 
   try {
+    // Gabungkan hotel array menjadi string
+    const payload = {
+      ...form.value,
+      hotel: form.value.hotel.join(", "),
+    };
+
     if (editId.value) {
-      await api.put(`/new-customer/${editId.value}`, form.value);
+      await api.put(`/new-customer/${editId.value}`, payload);
     } else {
-      await api.post("/new-customer", form.value);
+      await api.post("/new-customer", payload);
     }
+
     resetForm();
     await getNewCustomers();
     await getSummary();
@@ -168,12 +175,17 @@ const filteredCustomers = computed(() => {
       (c.country || "").toLowerCase().includes(keyword) ||
       (c.social_media_id || "").toLowerCase().includes(keyword) ||
       (c.tour_packages || "").toLowerCase().includes(keyword) ||
-      (c.check_in || "").toLowerCase().includes(keyword) ||
-      (c.check_out || "").toLowerCase().includes(keyword) ||
+      formatDate(c.check_in).includes(keyword) || // <-- pakai formatDate
+      formatDate(c.check_out).includes(keyword) || // <-- pakai formatDate
       (c.hotel || "").toLowerCase().includes(keyword) ||
       (c.notes || "").toLowerCase().includes(keyword);
 
-    const matchesDate = filterDate.value ? c.date === filterDate.value : true;
+    const matchesDate = filterDate.value
+      ? formatDate(c.date) === filterDate.value ||
+        formatDate(c.check_in) === filterDate.value ||
+        formatDate(c.check_out) === filterDate.value
+      : true;
+
     const matchesProgress =
       filterProgress.value && filterProgress.value !== "all"
         ? c.progress === filterProgress.value
@@ -186,6 +198,16 @@ const filteredCustomers = computed(() => {
     return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
   });
 });
+
+const formatDate = (date) => {
+  if (!date) return "";
+  if (typeof date === "string") return date; // asumsikan sudah "YYYY-MM-DD"
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${year}-${month}-${day}`;
+};
 
 const uniqueSegmens = computed(() => {
   const seg = new Set();
@@ -208,17 +230,45 @@ const progressColor = (progress) => {
 const openCreateModal = () => {
   resetForm();
   editId.value = null;
+
+  form.value.pic = formatRole(authStore.user?.role);
+
   showModal.value = true;
 };
 
 const openEditModal = (customer) => {
   editId.value = customer.id;
-  Object.keys(form.value).forEach((k) => (form.value[k] = customer[k] ?? ""));
+
+  Object.keys(form.value).forEach((k) => {
+    form.value[k] = customer[k] ?? "";
+  });
+
+  // Pastikan hotel selalu array
+  form.value.hotel = customer.hotel
+    ? customer.hotel.split(",").map((h) => h.trim())
+    : [""];
+
+  form.value.pic = formatRole(authStore.user?.role);
+
   showModal.value = true;
 };
 
+function formatRole(role) {
+  if (!role) return "";
+  return role
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 const resetForm = () => {
-  Object.keys(form.value).forEach((k) => (form.value[k] = ""));
+  Object.keys(form.value).forEach((k) => {
+    if (k === "hotel") {
+      form.value[k] = [""];
+    } else {
+      form.value[k] = "";
+    }
+  });
   editId.value = null;
 };
 
@@ -349,6 +399,26 @@ watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
 const openDeleteModal = (id) => {
   selectedId.value = id;
   showDeleteModal.value = true;
+};
+
+const addHotel = () => {
+  form.value.hotel.push("");
+};
+
+const removeHotel = (index) => {
+  form.value.hotel.splice(index, 1);
+};
+
+const showHotelModal = ref(false);
+const selectedHotels = ref([]);
+
+const openHotelModal = (hotelStr) => {
+  if (hotelStr.includes(",")) {
+    selectedHotels.value = hotelStr.split(","); // lebih dari 1 hotel
+  } else {
+    selectedHotels.value = [hotelStr]; // satu hotel tetap dibuat array
+  }
+  showHotelModal.value = true;
 };
 </script>
 
@@ -598,7 +668,38 @@ const openDeleteModal = (id) => {
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               {{ c.check_out }}
             </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.hotel }}</td>
+            <td class="px-4 py-3 text-left">
+              <button
+                @click="openHotelModal(c.hotel)"
+                class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200"
+              >
+                View
+              </button>
+            </td>
+
+            <!-- Modal -->
+            <div
+              v-if="showHotelModal"
+              class="fixed inset-0 flex items-center justify-center z-50 bg-black/50"
+            >
+              <div class="bg-white rounded-lg shadow-lg w-80 p-4 relative">
+                <button
+                  @click="showHotelModal = false"
+                  class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+                <h3 class="text-lg font-bold mb-3">Hotels</h3>
+                <ul
+                  class="list-disc list-inside space-y-1 max-h-60 overflow-y-auto"
+                >
+                  <li v-for="(h, index) in selectedHotels" :key="index">
+                    {{ h.trim() }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <td class="px-4 py-3 align-middle text-left">{{ c.notes }}</td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               <div class="flex items-center gap-2">
@@ -785,7 +886,8 @@ const openDeleteModal = (id) => {
                   <input
                     v-model="form.pic"
                     placeholder="PIC"
-                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 bg-slate-100 cursor-not-allowed focus:outline-none"
+                    readonly
                   />
                 </div>
 
@@ -888,17 +990,41 @@ const openDeleteModal = (id) => {
                 </div>
 
                 <!-- Hotel -->
+                <!-- Hotel -->
                 <div class="flex flex-col mb-3">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Hotel <span class="text-red-500">*</span>
                   </label>
-                  <input
-                    v-model="form.hotel"
-                    placeholder="Hotel"
-                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                  />
+
+                  <div
+                    v-for="(h, index) in form.hotel"
+                    :key="index"
+                    class="flex gap-2 mb-2"
+                  >
+                    <input
+                      v-model="form.hotel[index]"
+                      placeholder="Hotel"
+                      class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none flex-1"
+                    />
+                    <button
+                      type="button"
+                      @click="removeHotel(index)"
+                      class="px-3 py-1 bg-red-500 text-white rounded"
+                      v-if="form.hotel.length > 1"
+                    >
+                      -
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    @click="addHotel"
+                    class="px-3 py-1 bg-blue-500 text-white rounded"
+                  >
+                    + Tambah Hotel
+                  </button>
                 </div>
 
                 <!-- Notes -->
