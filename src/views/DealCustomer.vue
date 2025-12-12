@@ -8,6 +8,7 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-vue-next";
+import TransportList from "@/components/TransportList.vue";
 import ConfirmModal from "@/components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
@@ -56,6 +57,7 @@ const totalItems = ref(0);
 const customerSearch = ref("");
 const focusInputSearch = ref(false);
 
+// Milik new customer
 const editFormNewCustomer = ref({
   date: "",
   phone: "",
@@ -73,6 +75,7 @@ const editFormNewCustomer = ref({
   notes: "",
 });
 
+// Milik Deal customer
 const dealForm = ref({
   id: null,
   new_customer_id: "",
@@ -80,7 +83,22 @@ const dealForm = ref({
   link_drive: "",
   total_pax: "",
   activity: "",
-  payment_status: null,
+  note_hotel: "",
+  note_resto: "",
+  payment_status: "",
+
+  // penting!!
+  transport: [
+    {
+      guide: "",
+      hp_guide: "",
+      driver: "",
+      hp_driver: "",
+      note_operation: "",
+      report: "",
+      foto: [],
+    },
+  ],
 });
 
 // Modal delete
@@ -88,7 +106,6 @@ const showDeleteModal = ref(false);
 const selectedId = ref(null);
 const deleteType = ref(null);
 
-// load both endpoints and build combinedData
 const loadData = async () => {
   loading.value = true;
   try {
@@ -100,36 +117,33 @@ const loadData = async () => {
     newCustomers.value = ncRes.data?.data || [];
     deals.value = dcRes.data?.data || [];
 
-    // Build combinedData: every new_customer appears, with its deal (if any)
-    combinedData.value = newCustomers.value.map((nc) => {
-      const deal = deals.value.find((d) => {
-        // deal might include new_customer inside, check both possibilities
-        if (d.new_customer_id !== undefined) {
-          return Number(d.new_customer_id) === Number(nc.id);
+    // Build combinedData: hanya deal aktif
+    combinedData.value = newCustomers.value
+      .filter((nc) => nc.progress?.toLowerCase() === "deal") // hanya customer deal aktif
+      .map((nc) => {
+        const deal = deals.value.find(
+          (d) => Number(d.new_customer_id) === Number(nc.id)
+        );
+
+        // Jika belum punya deal_customer, buat dummy deal
+        if (!deal) {
+          return {
+            new_customer: nc,
+            deal_customer: {
+              id: null,
+              new_customer_id: nc.id,
+              status: "deal-from-progress",
+              is_auto: true,
+            },
+          };
         }
-        // fallback: if API returned nested new_customer in deal
-        return d.new_customer?.id === nc.id;
+
+        return {
+          new_customer: nc,
+          deal_customer: deal,
+        };
       });
-      return {
-        new_customer: nc,
-        deal_customer: deal || null,
-      };
-    });
 
-    // Also include any deal entries that belong to new customers not present (defensive)
-    deals.value.forEach((d) => {
-      const has = combinedData.value.some(
-        (item) => item.new_customer?.id === d.new_customer_id
-      );
-      if (!has) {
-        combinedData.value.push({
-          new_customer: d.new_customer || null,
-          deal_customer: d,
-        });
-      }
-    });
-
-    // update totalItems for pagination
     totalItems.value = combinedData.value.length;
   } catch (e) {
     console.error("loadData error:", e);
@@ -148,8 +162,128 @@ const onSelectCustomer = () => {
   );
 };
 
+const addTransport = () => {
+  dealForm.value.transport.push({
+    guide: "",
+    hp_guide: "",
+    driver: "",
+    hp_driver: "",
+    note_operation: "",
+    report: "",
+    foto: [],
+  });
+};
+
+const removeTransport = (index) => {
+  dealForm.value.transport.splice(index, 1);
+};
+const handleTransportFiles = (e, index) => {
+  const files = Array.from(e.target.files);
+  dealForm.value.transport[index].foto.push(...files);
+};
+const removeTransportFile = (transportIndex, fileIndex) => {
+  dealForm.transport[transportIndex].foto.splice(fileIndex, 1);
+};
+
+// const handleSave = async () => {
+//   // ensure new_customer_id exists
+//   if (!dealForm.value.new_customer_id) {
+//     alertType.value = "error";
+//     alertMessage.value = "Pilih customer terlebih dahulu.";
+//     showAlert.value = true;
+//     setTimeout(() => (showAlert.value = false), 3000);
+//     return;
+//   }
+
+//   const fd = new FormData();
+//   isLoading.value = true;
+
+//   // always include new_customer_id
+//   fd.append("new_customer_id", dealForm.value.new_customer_id);
+
+//   // append other fields (skip null payment_status)
+//   Object.keys(dealForm.value).forEach((key) => {
+//     const val = dealForm.value[key];
+//     if (key === "payment_status") {
+//       if (val) fd.append(key, val);
+//     } else if (val !== null && val !== undefined) {
+//       fd.append(key, String(val));
+//     }
+//   });
+
+//   // ======================================
+//   // TRANSPORT — kirim semua input + files
+//   // ======================================
+//   dealForm.value.transport.forEach((tr, i) => {
+//     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
+//     fd.append(`transport[${i}][hp_guide]`, tr.hp_guide ?? "");
+//     fd.append(`transport[${i}][driver]`, tr.driver ?? "");
+//     fd.append(`transport[${i}][hp_driver]`, tr.hp_driver ?? "");
+//     fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
+//     fd.append(`transport[${i}][report]`, tr.report ?? "");
+
+//     // FILE MULTIPLE
+//     tr.foto.forEach((file) => {
+//       fd.append(`transport[${i}][foto][]`, file);
+//     });
+//   });
+
+//   // **PENTING: tambahkan file**
+//   dealSelectedFiles.value.forEach((file) => {
+//     fd.append("files[]", file);
+//   });
+
+//   try {
+//     let res;
+
+//     if (!dealForm.value.id) {
+//       res = await api.post("/deal-customer", fd, {
+//         headers: { "Content-Type": "multipart/form-data" },
+//       });
+//     } else {
+//       res = await api.post(
+//         `/deal-customer/${dealForm.value.id}?_method=PUT`,
+//         fd,
+//         {
+//           headers: { "Content-Type": "multipart/form-data" },
+//         }
+//       );
+//     }
+
+//     // GET the deal ID (baru dibuat)
+//     const dealId = res.data.data.id;
+
+//     // UPLOAD MULTIPLE FILE (Wajib!!)
+//     if (dealSelectedFiles.value.length > 0) {
+//       const fileForm = new FormData();
+//       dealSelectedFiles.value.forEach((f) => fileForm.append("files[]", f));
+//       await api.post(`/deal-customer-files/upload/${dealId}`, fileForm, {
+//         headers: { "Content-Type": "multipart/form-data" },
+//       });
+//     }
+
+//     alertType.value = "success";
+//     alertMessage.value = "Data berhasil disimpan!";
+//     showAlert.value = true;
+
+//     await loadData();
+//   } catch (error) {
+//     console.error("handleSave error:", error);
+//     // try to show backend validation if exists
+//     const msg =
+//       error?.response?.data?.message ||
+//       "Gagal menyimpan data! Silahkan cek input.";
+//     alertType.value = "error";
+//     alertMessage.value = msg;
+//     showAlert.value = true;
+//   } finally {
+//     isLoading.value = false;
+//     setTimeout(() => (showAlert.value = false), 3000);
+//     reset();
+//   }
+// };
+
 const handleSave = async () => {
-  // ensure new_customer_id exists
   if (!dealForm.value.new_customer_id) {
     alertType.value = "error";
     alertMessage.value = "Pilih customer terlebih dahulu.";
@@ -161,82 +295,102 @@ const handleSave = async () => {
   const fd = new FormData();
   isLoading.value = true;
 
-  // always include new_customer_id
+  // ==========================
+  // 1. NEW CUSTOMER UPDATE
+  // ==========================
+  // Tambahkan ini di handleSave()
+  if (editFormNewCustomer.value) {
+    Object.keys(editFormNewCustomer.value).forEach((key) => {
+      const val = editFormNewCustomer.value[key];
+
+      // pastikan val bukan object
+      if (val !== null && val !== undefined && typeof val !== "object") {
+        fd.append(`new_customer[${key}]`, String(val));
+      }
+    });
+  }
+
+  // ID new_customer (wajib)
   fd.append("new_customer_id", dealForm.value.new_customer_id);
 
-  // append other fields (skip null payment_status)
+  // ==========================
+  // 2. DEAL CUSTOMER FIELDS
+  // ==========================
   Object.keys(dealForm.value).forEach((key) => {
     const val = dealForm.value[key];
-    if (key === "payment_status") {
-      if (val) fd.append(key, val);
-    } else if (val !== null && val !== undefined) {
+    if (key === "transport") return;
+    if (key === "payment_status" && !val) return;
+    if (val !== null && val !== undefined) {
       fd.append(key, String(val));
     }
   });
 
+  // ==========================
+  // DEBUG: console log FormData
+  // ==========================
+  console.log("=== FormData Entries ===");
+  for (let pair of fd.entries()) {
+    console.log(pair[0], pair[1]);
+  }
+
+  // ==========================
+  // 3. TRANSPORT + FILES
+  // ==========================
+  dealForm.value.transport.forEach((tr, i) => {
+    fd.append(`transport[${i}][id]`, tr.id ?? "");
+    fd.append(`transport[${i}][guide]`, tr.guide ?? "");
+    fd.append(`transport[${i}][hp_guide]`, tr.hp_guide ?? "");
+    fd.append(`transport[${i}][driver]`, tr.driver ?? "");
+    fd.append(`transport[${i}][hp_driver]`, tr.hp_driver ?? "");
+    fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
+    fd.append(`transport[${i}][report]`, tr.report ?? "");
+
+    (tr.foto_existing || []).forEach((old) => {
+      fd.append(`transport[${i}][foto_existing][]`, old.file_name);
+    });
+
+    tr.foto.forEach((file) => {
+      fd.append(`transport[${i}][foto][]`, file);
+    });
+  });
+
+  // ==========================
+  // 4. FILE UMUM DEAL
+  // ==========================
+  dealSelectedFiles.value.forEach((file) => {
+    fd.append("files[]", file);
+  });
+
+  // ==========================
+  // DEBUG: cek selectedCustomer
+  // ==========================
+  console.log("selectedCustomer.value:", selectedCustomer.value);
+  console.log("dealForm.value:", dealForm.value);
+
   try {
+    let res;
     if (!dealForm.value.id) {
-      await api.post("/deal-customer", fd, {
+      res = await api.post("/deal-customer", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
     } else {
-      await api.post(`/deal-customer/${dealForm.value.id}?_method=PUT`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      res = await api.post(
+        `/deal-customer/${dealForm.value.id}?_method=PUT`,
+        fd,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
     }
 
-    alertType.value = "success";
-    alertMessage.value = "Data berhasil disimpan!";
-    showAlert.value = true;
-    // reload data
-    await loadData();
+    isEditing.value = false;
+    console.log("response:", res.data);
   } catch (error) {
-    console.error("handleSave error:", error);
-    // try to show backend validation if exists
-    const msg =
-      error?.response?.data?.message ||
-      "Gagal menyimpan data! Silahkan cek input.";
-    alertType.value = "error";
-    alertMessage.value = msg;
-    showAlert.value = true;
+    console.error("error:", error?.response?.data || error);
   } finally {
     isLoading.value = false;
-    setTimeout(() => (showAlert.value = false), 3000);
     reset();
   }
-};
-
-const editDeal = (d) => {
-  isEditing.value = true;
-
-  dealForm.value = {
-    id: d.deal_customer?.id ?? null,
-    new_customer_id: d.new_customer?.id ?? "",
-    handler: d.deal_customer?.handler ?? "",
-    link_drive: d.deal_customer?.link_drive ?? "",
-    total_pax: d.deal_customer?.total_pax ?? "",
-    activity: d.deal_customer?.activity ?? "",
-    payment_status: null,
-  };
-
-  editFormNewCustomer.value = {
-    date: d.new_customer?.date ?? "",
-    phone: d.new_customer?.phone ?? "",
-    name: d.new_customer?.name ?? "",
-    progress: d.new_customer?.progress ?? "",
-    pic: d.new_customer?.pic ?? "",
-    segmen: d.new_customer?.segmen ?? "",
-    via: d.new_customer?.via ?? "",
-    country: d.new_customer?.country ?? "",
-    social_media_id: d.new_customer?.social_media_id ?? "",
-    tour_packages: d.new_customer?.tour_packages ?? "",
-    check_in: d.new_customer?.check_in ?? "",
-    check_out: d.new_customer?.check_out ?? "",
-    hotel: d.new_customer?.hotel ?? "",
-    notes: d.new_customer?.notes ?? "",
-  };
-
-  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 const confirmDelete = async () => {
@@ -262,12 +416,27 @@ const reset = () => {
     link_drive: "",
     total_pax: "",
     activity: "",
-    payment_status: null,
+    note_hotel: "",
+    note_resto: "",
+    payment_status: "",
+    transport: [
+      {
+        guide: "",
+        hp_guide: "",
+        driver: "",
+        hp_driver: "",
+        note_operation: "",
+        report: "",
+        foto: [],
+      },
+    ],
   };
+
   selectedCustomer.value = null;
   selectedCustomerText.value = "";
   isEditing.value = false;
   originalDealData.value = null;
+  dealSelectedFiles.value = [];
 };
 onMounted(loadData);
 
@@ -282,8 +451,10 @@ const filteredDeals = computed(() => {
     const c = item.new_customer || {};
     const d = item.deal_customer || {};
 
-    // search across several fields
-    const fields = [
+    // ------------------------------
+    // 1. Gabungkan field Customer + Deal
+    // ------------------------------
+    const customerDealFields = [
       c.name,
       c.phone,
       c.date,
@@ -301,6 +472,8 @@ const filteredDeals = computed(() => {
       d.handler,
       d.link_drive,
       d.activity,
+      d.note_hotel,
+      d.note_resto,
       String(d.total_pax || ""),
       d.payment_status,
     ]
@@ -309,8 +482,42 @@ const filteredDeals = computed(() => {
       )
       .join(" ");
 
-    const matchesKeyword = keyword ? fields.includes(keyword) : true;
-    const matchesDate = dateFilter ? c.date === dateFilter : true;
+    // ------------------------------
+    // 2. Gabungkan field Transport
+    // ------------------------------
+    const transportFields = (d.transports || [])
+      .map((t) => {
+        return [
+          t.guide,
+          t.driver,
+          t.hp_guide,
+          t.hp_driver,
+          t.note_operation,
+          t.report,
+          ...(t.foto || []).map((f) => f.file_name || f.original || ""),
+        ]
+          .filter((f) => f) // buang null/undefined
+          .map((f) => String(f).toLowerCase())
+          .join(" ");
+      })
+      .join(" ");
+
+    // ------------------------------
+    // 3. Keyword matching
+    // ------------------------------
+    const matchesKeyword = keyword
+      ? (customerDealFields + " " + transportFields).includes(keyword)
+      : true;
+
+    // ------------------------------
+    // 4. Filter lain: date, progress, segmen
+    // ------------------------------
+    const matchesDate = dateFilter
+      ? c.date?.substring(0, 10) === dateFilter ||
+        c.check_in?.substring(0, 10) === dateFilter ||
+        c.check_out?.substring(0, 10) === dateFilter
+      : true;
+
     const matchesProgress =
       progressFilter && progressFilter !== "all"
         ? (c.progress || "").toLowerCase() === progressFilter.toLowerCase()
@@ -320,7 +527,9 @@ const filteredDeals = computed(() => {
         ? (c.segmen || "").toLowerCase() === segmenFilter.toLowerCase()
         : true;
 
-    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+    const result =
+      matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+    return result;
   });
 });
 
@@ -333,69 +542,6 @@ const uniqueSegmens = computed(() => {
   });
   return Array.from(seg);
 });
-
-const downloadCSV = () => {
-  const headers = [
-    "Customer Name",
-    "PIC",
-    "Date",
-    "Phone",
-    "Progress",
-    "Segmen",
-    "Country",
-    "Tour Packages",
-    "Check In",
-    "Check Out",
-    "Hotel",
-    "Handler",
-    "Link Drive",
-    "Total Pax",
-    "Activity",
-    "Payment Status",
-    "Via",
-    "Social Media ID",
-    "Notes",
-  ];
-
-  const rows = filteredDeals.value.map((item) => {
-    const c = item.new_customer || {};
-    const d = item.deal_customer || {};
-
-    return [
-      c.name || "",
-      c.pic || "",
-      c.date || "",
-      c.phone || "",
-      c.progress || "",
-      c.segmen || "",
-      c.country || "",
-      c.tour_packages || "",
-      c.check_in || "",
-      c.check_out || "",
-      c.hotel || "",
-      d.handler || "",
-      d.link_drive || "",
-      d.total_pax ?? "",
-      d.activity || "",
-      d.payment_status || "",
-      c.via || "",
-      c.social_media_id || "",
-      c.notes || "",
-    ];
-  });
-
-  const csvContent =
-    "data:text/csv;charset=utf-8," +
-    [headers, ...rows].map((e) => e.join(",")).join("\n");
-
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "deal_customers.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
 
 // Reset Filters
 const resetFilters = () => {
@@ -490,12 +636,16 @@ const cancelEdit = () => {
       link_drive: originalDealData.value.deal_customer?.link_drive ?? "",
       total_pax: originalDealData.value.deal_customer?.total_pax ?? "",
       activity: originalDealData.value.deal_customer?.activity ?? "",
-      payment_status: null,
+      note_hotel: originalDealData.value.deal_customer?.note_hotel ?? "",
+      note_resto: originalDealData.value.deal_customer?.note_resto ?? "",
+      payment_status:
+        originalDealData.value.deal_customer?.payment_status ?? "", // string: dp/lunas
     };
 
     selectedCustomer.value = originalDealData.value.new_customer;
     selectedCustomerText.value = `${originalDealData.value.new_customer?.name} — (${originalDealData.value.new_customer?.phone})`;
   }
+
   reset();
   isEditing.value = false;
   originalDealData.value = null;
@@ -546,7 +696,7 @@ const openDeleteModal = (row) => {
     deleteType.value = "customer";
     selectedId.value = row.new_customer.id;
   } else {
-    console.error("❌ Tidak ada ID yang bisa dihapus");
+    console.error(" Tidak ada ID yang bisa dihapus");
     return;
   }
   showDeleteModal.value = true;
@@ -561,6 +711,283 @@ const filteredCustomers = computed(() => {
       (customer.progress && customer.progress.toLowerCase().includes(keyword))
   );
 });
+
+// MULAI DARI SINI FITUR UPLOAD FILE DEAL CUSTOMER + RELASI NEW CUSTOMER
+const dealFiles = ref([]);
+const customerFiles = ref([]);
+const allFiles = ref([]);
+const dealSelectedFiles = ref([]);
+const API_BASE = "http://127.0.0.1:8000";
+
+const loadFiles = async (dealCustomerId, newCustomerId) => {
+  allFiles.value = [];
+
+  try {
+    let dealFilesApi = [];
+    let newFilesApi = [];
+
+    // --- 1. Load new customer files ---
+    if (newCustomerId) {
+      const newRes = await api.get(`/customer-files/${newCustomerId}`);
+      newFilesApi = (newRes.data.files ?? []).map((f) => ({
+        id: `nc-${f.real_id}`,
+        real_id: f.real_id,
+        original_name: f.original_name,
+        preview_url: `${API_BASE}${f.preview_url}`,
+        source: "new_customer",
+      }));
+    }
+
+    // --- 2. Load deal customer files ---
+    if (dealCustomerId) {
+      const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
+      dealFilesApi = (dealRes.data.files ?? []).map((f) => ({
+        id: `dc-${f.real_id}`,
+        real_id: f.real_id,
+        original_name: f.original_name,
+        preview_url: `${API_BASE}${f.preview_url}`,
+        source: "deal_customer",
+      }));
+    }
+
+    // --- 3. FILTER hanya jika file DEAL punya nama sama
+    //     dan PREVIEW URL-nya juga sama (benar-benar file yang sama)
+    const filteredDealFiles = dealFilesApi.filter((df) => {
+      return !newFilesApi.some(
+        (nf) =>
+          nf.original_name === df.original_name &&
+          nf.preview_url === df.preview_url
+      );
+    });
+
+    // --- 4. Gabungkan ---
+    allFiles.value = [...newFilesApi, ...filteredDealFiles];
+  } catch (err) {
+    console.error("Load files failed:", err);
+  }
+};
+
+const removeDealFile = async (file) => {
+  if (!file?.id || file.source !== "deal_customer") return;
+
+  if (!confirm("Yakin ingin menghapus file ini?")) return;
+
+  try {
+    await api.delete(`/deal-customer-files/${file.id.replace("dc-", "")}`);
+    allFiles.value = allFiles.value.filter((f) => f.id !== file.id);
+  } catch (e) {
+    console.error("Delete failed:", e);
+  }
+};
+const editDeal = (d) => {
+  isEditing.value = true;
+
+  // =============================
+  // SET TRANSPORT (array input)
+  // =============================
+  const transportData = d.deal_customer?.transports?.length
+    ? d.deal_customer.transports.map((t) => ({
+        id: t.id, // ✔ PENTING: kirim ID
+        guide: t.guide ?? "",
+        hp_guide: t.hp_guide ?? "",
+        driver: t.driver ?? "",
+        hp_driver: t.hp_driver ?? "",
+        note_operation: t.note_operation ?? "",
+        report: t.report ?? "",
+
+        foto_existing: t.foto ?? [], // ✔ Foto lama masuk sini
+        foto: [], // file baru
+      }))
+    : [
+        {
+          id: null,
+          guide: "",
+          hp_guide: "",
+          driver: "",
+          hp_driver: "",
+          note_operation: "",
+          report: "",
+          foto_existing: [], // kosong
+          foto: [],
+        },
+      ];
+
+  // ========================================
+  // ASSIGN dealForm TANPA MENGHAPUS transport
+  // ========================================
+  dealForm.value = {
+    ...dealForm.value, // <-- PENTING agar transport tidak hilang!
+    transport: transportData,
+
+    id: d.deal_customer?.id ?? null,
+    new_customer_id: d.new_customer?.id ?? "",
+    handler: d.deal_customer?.handler ?? "",
+    link_drive: d.deal_customer?.link_drive ?? "",
+    total_pax: d.deal_customer?.total_pax ?? "",
+    activity: d.deal_customer?.activity ?? "",
+    note_hotel: d.deal_customer?.note_hotel ?? "",
+    note_resto: d.deal_customer?.note_resto ?? "",
+    payment_status: d.deal_customer?.payment_status ?? "",
+  };
+
+  // =============================
+  // EDIT CUSTOMER INFO
+  // =============================
+  editFormNewCustomer.value = {
+    date: d.new_customer?.date ?? "",
+    phone: d.new_customer?.phone ?? "",
+    name: d.new_customer?.name ?? "",
+    progress: d.new_customer?.progress ?? "",
+    pic: d.new_customer?.pic ?? "",
+    segmen: d.new_customer?.segmen ?? "",
+    via: d.new_customer?.via ?? "",
+    country: d.new_customer?.country ?? "",
+    social_media_id: d.new_customer?.social_media_id ?? "",
+    tour_packages: d.new_customer?.tour_packages ?? "",
+    check_in: d.new_customer?.check_in ?? "",
+    check_out: d.new_customer?.check_out ?? "",
+    hotel: d.new_customer?.hotel ?? "",
+    notes: d.new_customer?.notes ?? "",
+  };
+
+  // =============================
+  // FILES
+  // =============================
+  dealSelectedFiles.value = [];
+  loadFiles(d.deal_customer?.id ?? null, d.new_customer?.id ?? null);
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+// // file yang sudah ada (backend)
+// const dealExistingFiles = ref([]);
+
+// Saat memilih file baru
+const handleDealFileChange = (e) => {
+  const files = Array.from(e.target.files);
+  dealSelectedFiles.value.push(...files);
+};
+
+// Hapus file yang baru dipilih (belum diupload)
+const removeDealSelectedFile = (index) => {
+  dealSelectedFiles.value.splice(index, 1);
+};
+
+// // Hapus file yang sudah disimpan di backend
+// const deleteDealExistingFile = async (fileId) => {
+//   try {
+//     await api.delete(`/deal-customer-files/${fileId}`);
+//     dealExistingFiles.value = dealExistingFiles.value.filter(
+//       (f) => f.id !== fileId
+//     );
+//   } catch (error) {
+//     console.error("Delete failed:", error);
+//   }
+// };
+
+// DOWLOAD + MODAL + GABUNG NEW & DEAL
+const showFileModal = ref(false);
+const modalFiles = ref([]);
+// tombol ditekan
+// const openFilePreview = async (dealId) => {
+//   try {
+//     const res = await api.get(`/deal-customer-files/${dealId}`);
+//     modalFiles.value = res.data.files.map((f) => ({
+//       ...f,
+//       preview_url: API_BASE + f.preview_url,
+//     }));
+//     showFileModal.value = true;
+//   } catch (err) {
+//     console.error(err);
+//   }
+// };
+const openFilePreview = async (dealId) => {
+  try {
+    const res = await api.get(`/deal-customer-files/${dealId}`);
+
+    console.log("Res data dari backend:", res.data.files); // 🔍 cek semua file
+
+    modalFiles.value = res.data.files.map((f) => {
+      console.log("File diproses:", f); // 🔍 cek setiap file satu per satu
+      return {
+        ...f,
+        preview_url: f.preview_url, // jangan tambah API_BASE kalau backend sudah asset()
+      };
+    });
+
+    console.log("Modal files:", modalFiles.value); // 🔍 cek array yang akan dipakai di template
+
+    showFileModal.value = true;
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const closeFileModal = () => {
+  showFileModal.value = false;
+};
+// const downloadFile = (file) => {
+//   const url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
+//   window.open(url, "_blank");
+// };
+
+const downloadFile = (file) => {
+  let url = "";
+
+  if (file.source === "new_customer" || file.source === "deal_customer") {
+    // pakai real_id untuk endpoint
+    url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
+  } else if (file.source === "transport") {
+    // pakai transport_id + file_name
+    url = `http://127.0.0.1:8000/files/download/transport/${file.transport_id}/${file.file_name}`;
+  }
+
+  window.open(url, "_blank");
+};
+
+// FITUR CANCELED BERAWAL DARI DEAL KE CANCEL DI HALAMAN DEAL CUSTOMER
+const selectedCustomerToCancel = ref(null);
+const isCancelModalOpen = ref(false);
+
+const openCancelModal = (row) => {
+  const customer = row?.new_customer;
+
+  if (!customer) {
+    console.error("❌ new_customer tidak ditemukan", row);
+    return;
+  }
+
+  // Hanya bisa cancel jika progress = "deal"
+  if (!customer.progress || customer.progress.toLowerCase() !== "deal") {
+    alert("Customer ini belum dalam status deal.");
+    return;
+  }
+
+  selectedCustomerToCancel.value = customer;
+  isCancelModalOpen.value = true;
+};
+
+const cancelDeal = async () => {
+  try {
+    const customer = selectedCustomerToCancel.value;
+    if (!customer?.id) return;
+
+    await api.put(`/new-customer/${customer.id}`, { progress: "canceled" });
+
+    await loadData(); // reload untuk hapus dari Deal Customer
+    isCancelModalOpen.value = false;
+    selectedCustomerToCancel.value = null;
+  } catch (err) {
+    console.error("Error canceling deal:", err);
+    alert("Gagal membatalkan deal.");
+  }
+};
+
+// (SEMUA HALAMAN INI ADA PENAMBAHAN LABEL PADA DEAL DAN GANTI TIPE DATA )
+// Dowload PDF NEW + DEAL CUSTOMER
+const downloadPdf = () => {
+  window.open("http://127.0.0.1:8000/deal-customer/pdf", "_blank");
+};
 </script>
 
 <template>
@@ -621,7 +1048,11 @@ const filteredCustomers = computed(() => {
 
         <div>
           <label>Progress *</label>
-          <input v-model="editFormNewCustomer.progress" class="input" />
+          <select v-model="editFormNewCustomer.progress" class="input">
+            <option value="On Progress">On Progress</option>
+            <option value="Canceled">Canceled</option>
+            <option value="Deal">Deal</option>
+          </select>
         </div>
 
         <div>
@@ -715,7 +1146,7 @@ const filteredCustomers = computed(() => {
           </label>
           <input
             v-model="dealForm.total_pax"
-            type="number"
+            type="text"
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
             placeholder="Total Pax"
           />
@@ -727,27 +1158,234 @@ const filteredCustomers = computed(() => {
           </label>
           <input
             v-model="dealForm.activity"
+            type="text"
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
             placeholder="Activity"
           />
         </div>
 
-        <div class="col-span-2">
-          <label class="font-medium text-slate-700">
-            Payment Status (Upload)
-            <span class="text-red-500">*</span>
+        <!-- note_hotel -->
+        <div>
+          <label class="font-medium text-slate-700">Note Hotel</label>
+          <textarea
+            v-model="dealForm.note_hotel"
+            type="text"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Note Hotel"
+          ></textarea>
+        </div>
 
-            <span class="block text-xs text-slate-500 mt-1 mb-1">
-              Allowed: jpg, jpeg, png, pdf
-            </span>
+        <!-- note_resto -->
+        <div>
+          <label class="font-medium text-slate-700">Note Resto</label>
+          <textarea
+            v-model="dealForm.note_resto"
+            type="text"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            placeholder="Note Resto"
+          ></textarea>
+        </div>
+
+        <!-- payment_status -->
+        <div>
+          <label class="font-medium text-slate-700"
+            >Payment Status <span class="text-red-500">*</span></label
+          >
+          <select
+            v-model="dealForm.payment_status"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+          >
+            <option value="" disabled>Pilih Payment Status</option>
+            <option value="dp">DP</option>
+            <option value="lunas">Lunas</option>
+          </select>
+        </div>
+
+        <h4 class="font-semibold mb-2 text-slate-700">
+          File Customer (New Customer + Deal Customer)
+        </h4>
+
+        <!-- PREVIEW ALL FILES -->
+        <div class="flex flex-wrap gap-3 mt-2">
+          <div
+            v-for="file in allFiles"
+            :key="file.id"
+            class="p-2 border rounded bg-gray-100 flex items-center justify-between w-60"
+          >
+            <a
+              :href="file.preview_url"
+              target="_blank"
+              class="truncate max-w-[120px]"
+            >
+              {{ file.original_name }}
+            </a>
+
+            <button
+              v-if="file.source === 'deal_customer'"
+              @click="removeDealFile(file)"
+              class="text-red-500 font-bold"
+            >
+              x
+            </button>
+          </div>
+        </div>
+
+        <!-- UPLOAD FILE DEAL CUSTOMER -->
+        <div class="mt-4">
+          <label class="font-medium text-slate-700 mb-1 block">
+            Upload File Deal Customer
           </label>
 
           <input
             type="file"
-            @change="(e) => (dealForm.payment_status = e.target.files[0])"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            multiple
+            @change="handleDealFileChange"
+            class="w-full border-[1.5px] border-slate-200 rounded-lg p-2 mt-1"
           />
         </div>
+
+        <!-- SELECTED FILES (belum upload) -->
+        <div class="flex flex-wrap gap-2 mt-3" v-if="dealSelectedFiles.length">
+          <div
+            v-for="(file, index) in dealSelectedFiles"
+            :key="index"
+            class="p-2 border rounded bg-slate-100 flex items-center justify-between"
+          >
+            <span class="truncate max-w-[150px]">{{ file.name }}</span>
+
+            <button
+              type="button"
+              @click="removeDealSelectedFile(index)"
+              class="text-red-500 ml-2"
+            >
+              x
+            </button>
+          </div>
+        </div>
+
+        <!-- ================= TRANSPORT FORM ================= -->
+        <div class="col-span-2 mt-8">
+          <h3 class="text-lg font-semibold mb-4 text-slate-700">
+            Transport Information
+          </h3>
+
+          <div
+            v-for="(tr, index) in dealForm.transport"
+            :key="index"
+            class="border border-slate-300 rounded-xl p-5 mb-6 bg-white shadow-sm"
+          >
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="font-semibold text-slate-700">
+                Transport #{{ index + 1 }}
+              </h4>
+
+              <button
+                v-if="dealForm.transport.length > 1"
+                @click="removeTransport(index)"
+                class="text-red-600 hover:text-red-800"
+              >
+                Hapus
+              </button>
+            </div>
+
+            <!-- GRID INPUT -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
+              <div>
+                <label class="font-medium text-slate-700">Guide</label>
+                <input v-model="tr.guide" class="input" placeholder="Guide" />
+              </div>
+
+              <div>
+                <label class="font-medium text-slate-700">HP Guide</label>
+                <input
+                  v-model="tr.hp_guide"
+                  class="input"
+                  placeholder="HP Guide"
+                />
+              </div>
+
+              <div>
+                <label class="font-medium text-slate-700">Driver</label>
+                <input v-model="tr.driver" class="input" placeholder="Driver" />
+              </div>
+
+              <div>
+                <label class="font-medium text-slate-700">HP Driver</label>
+                <input
+                  v-model="tr.hp_driver"
+                  class="input"
+                  placeholder="HP Driver"
+                />
+              </div>
+
+              <div class="col-span-2">
+                <label class="font-medium text-slate-700">Note Operation</label>
+                <textarea
+                  v-model="tr.note_operation"
+                  class="input"
+                  placeholder="Note Operation"
+                ></textarea>
+              </div>
+
+              <div class="col-span-2">
+                <label class="font-medium text-slate-700">Report</label>
+                <textarea
+                  v-model="tr.report"
+                  class="input"
+                  placeholder="Report"
+                ></textarea>
+              </div>
+
+              <!-- FILE UPLOAD -->
+              <!-- FILE UPLOAD -->
+              <div class="col-span-2">
+                <label class="font-medium text-slate-700"
+                  >Upload Foto Transport</label
+                >
+                <input
+                  type="file"
+                  multiple
+                  @change="handleTransportFiles($event, index)"
+                  class="w-full border border-slate-300 rounded-lg p-2 mt-2 bg-white"
+                />
+
+                <!-- PREVIEW FILE GRID -->
+                <div
+                  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3"
+                  v-if="tr.foto.length"
+                >
+                  <div
+                    v-for="(file, fIndex) in tr.foto"
+                    :key="fIndex"
+                    class="relative p-2 bg-slate-100 rounded border flex flex-col items-center justify-center"
+                  >
+                    <span class="text-sm truncate max-w-full">{{
+                      file.name
+                    }}</span>
+
+                    <!-- tombol hapus -->
+                    <button
+                      type="button"
+                      @click="removeTransportFile(index, fIndex)"
+                      class="absolute top-1 right-1 text-red-600 hover:text-red-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BUTTON ADD TRANSPORT -->
+          <button
+            @click="addTransport"
+            class="px-4 py-2 bg-green-600 text-white rounded-lg mb-6"
+          >
+            + Tambah Transport
+          </button>
+        </div>
+        <!-- ================= END TRANSPORT FORM ================= -->
       </div>
 
       <!-- Save -->
@@ -897,10 +1535,10 @@ const filteredCustomers = computed(() => {
 
       <div class="lg:col-span-5 flex gap-2 justify-end">
         <button
-          @click="downloadCSV"
-          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
+          @click="downloadPdf"
+          class="bg-blue-600 text-white px-4 py-2 rounded"
         >
-          Download CSV
+          Download PDF
         </button>
         <button
           @click="resetFilters"
@@ -919,6 +1557,8 @@ const filteredCustomers = computed(() => {
       >
         <thead class="bg-blue-900 text-white">
           <tr>
+            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
+            <th class="px-4 py-3 text-left w-[12%]">File</th>
             <th class="px-4 py-3 text-left">No</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[10%]">Phone</th>
@@ -933,11 +1573,23 @@ const filteredCustomers = computed(() => {
             <th class="px-4 py-3 text-left w-[8%]">Check In</th>
             <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
             <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
+
             <th class="px-4 py-3 text-left w-[10%]">Handler</th>
             <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
             <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
             <th class="px-4 py-3 text-left w-[10%]">Activity</th>
-            <th class="px-4 py-3 text-left w-[10%]">Payment Satus</th>
+            <th class="px-4 py-3 text-left w-[10%]">Note Hotel</th>
+            <th class="px-4 py-3 text-left w-[10%]">Note Resto</th>
+            <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
+
+            <th class="px-4 py-2">Guide</th>
+            <th class="px-4 py-2">HP Guide</th>
+            <th class="px-4 py-2">Driver</th>
+            <th class="px-4 py-2">HP Driver</th>
+            <th class="px-4 py-2">Note Operation</th>
+            <th class="px-4 py-2">Report</th>
+            <!-- <th class="px-4 py-2">Foto</th> -->
+
             <th class="px-4 py-3 text-left w-[10%]">Notes</th>
             <th class="px-4 py-3 text-left w-[10%]">Actions</th>
           </tr>
@@ -969,9 +1621,42 @@ const filteredCustomers = computed(() => {
           <tr
             v-else
             v-for="(d, i) in paginatedDataCustomers"
-            :key="d.id"
+            :key="d.deal_customer?.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
+            <td class="px-4 py-3 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <button
+                  @click="openCancelModal(d)"
+                  class="px-2 py-1 bg-red-500 text-white rounded"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  @click="editDeal(d)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Pencil class="w-4 h-4 text-orange-500" />
+                </button>
+
+                <button
+                  @click="openDeleteModal(d)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Trash2 class="w-4 h-4 text-red-600" />
+                </button>
+              </div>
+            </td>
+            <td>
+              <button
+                @click="openFilePreview(d.deal_customer?.id)"
+                class="text-cyan-700 underline"
+              >
+                Lihat Semua File
+              </button>
+            </td>
+
             <td class="px-4 py-2">{{ i + 1 }}</td>
 
             <!-- NEW CUSTOMER -->
@@ -1016,16 +1701,97 @@ const filteredCustomers = computed(() => {
             <td>{{ d.deal_customer?.total_pax ?? "-" }}</td>
             <td>{{ d.deal_customer?.activity ?? "-" }}</td>
 
+            <td>{{ d.deal_customer?.note_hotel ?? "-" }}</td>
+            <td>{{ d.deal_customer?.note_resto ?? "-" }}</td>
             <td>
-              <a
-                v-if="d.deal_customer?.payment_status"
-                :href="`https://api.officebst.com/storage/${d.deal_customer.payment_status}`"
-                target="_blank"
-              >
-                Lihat File
-              </a>
+              <span v-if="d.deal_customer?.payment_status">
+                {{ d.deal_customer.payment_status === "dp" ? "DP" : "Lunas" }}
+              </span>
               <span v-else>-</span>
             </td>
+
+            <!-- Guide -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.guide ?? "-" }}
+              </div>
+            </td>
+
+            <!-- HP Guide -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.hp_guide ?? "-" }}
+              </div>
+            </td>
+
+            <!-- Driver -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.driver ?? "-" }}
+              </div>
+            </td>
+
+            <!-- HP Driver -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.hp_driver ?? "-" }}
+              </div>
+            </td>
+
+            <!-- Note Operation -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.note_operation ?? "-" }}
+              </div>
+            </td>
+
+            <!-- Report -->
+            <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+              >
+                {{ tr.report ?? "-" }}
+              </div>
+            </td>
+
+            <!-- Foto -->
+            <!-- <td class="px-4 py-3">
+              <div
+                v-for="(tr, j) in d.deal_customer?.transports || []"
+                :key="tr.id || j"
+                class="mb-1"
+              >
+                <span
+                  v-for="foto in tr.foto"
+                  :key="foto.file_name"
+                  class="block"
+                >
+                  <a
+                    :href="`http://127.0.0.1:8000/storage/${foto.path}`"
+                    target="_blank"
+                    class="text-blue-600 underline text-sm"
+                  >
+                    {{ foto.original }}
+                  </a>
+                </span>
+              </div>
+            </td> -->
 
             <td class="px-4 py-3">{{ d.new_customer?.notes }}</td>
 
@@ -1052,6 +1818,108 @@ const filteredCustomers = computed(() => {
       </table>
     </div>
 
+    <!-- Cancel Modal -->
+    <div
+      v-if="isCancelModalOpen"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center"
+    >
+      <div class="bg-white p-5 rounded shadow-lg w-80">
+        <h2 class="font-semibold text-lg mb-3">Batalkan Deal?</h2>
+
+        <p class="text-sm mb-4">
+          Apakah Anda yakin ingin membatalkan deal ini? Status di New Customer
+          akan berubah menjadi <b>CANCEL</b>.
+        </p>
+
+        <div class="flex justify-end gap-2">
+          <button
+            class="px-3 py-1 bg-slate-300 rounded"
+            @click="isCancelModalOpen = false"
+          >
+            Batal
+          </button>
+
+          <button
+            class="px-3 py-1 bg-red-500 text-white rounded"
+            @click="cancelDeal"
+          >
+            Ya, Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!--  MODAL FILE DOWLOAD -->
+    <div
+      v-if="showFileModal"
+      class="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
+    >
+      <div class="bg-white rounded-lg w-[90%] max-w-3xl p-6 relative">
+        <!-- Close button -->
+        <button
+          @click="closeFileModal"
+          class="absolute right-3 top-3 text-slate-600 hover:text-black"
+        >
+          ✖
+        </button>
+
+        <h2 class="text-xl font-semibold mb-4">Semua File</h2>
+
+        <!-- GRID -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div
+            v-for="file in modalFiles"
+            :key="file.id"
+            class="border rounded-lg p-2 shadow-sm bg-slate-50"
+          >
+            <!-- Preview jika gambar -->
+            <!-- <img
+              v-if="
+                file.original_name.endsWith('.jpg') ||
+                file.original_name.endsWith('.jpeg') ||
+                file.original_name.endsWith('.png')
+              "
+              :src="file.preview_url"
+              class="h-32 w-full object-cover rounded"
+            /> -->
+            <img
+              v-if="
+                typeof file.original_name === 'string' &&
+                (file.original_name.toLowerCase().endsWith('.jpg') ||
+                  file.original_name.toLowerCase().endsWith('.jpeg') ||
+                  file.original_name.toLowerCase().endsWith('.png'))
+              "
+              :src="
+                file.preview_url.startsWith('http')
+                  ? file.preview_url
+                  : API_BASE + file.preview_url
+              "
+              class="h-32 w-full object-cover rounded"
+            />
+
+            <!-- PDF Preview -->
+            <div
+              v-else-if="file.original_name.endsWith('.pdf')"
+              class="h-32 flex items-center justify-center bg-red-200 rounded-lg"
+            >
+              <span class="text-red-800 font-semibold">PDF</span>
+            </div>
+
+            <!-- Nama file -->
+            <p class="text-xs mt-2 truncate">{{ file.original_name }}</p>
+
+            <!-- Tombol Download -->
+            <button
+              @click="downloadFile(file)"
+              class="mt-2 text-blue-600 text-xs underline"
+            >
+              Download
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal delete -->
     <ConfirmModal
       :show="showDeleteModal"
@@ -1070,6 +1938,8 @@ const filteredCustomers = computed(() => {
       :page-size="pageSize"
       @update:page="(page) => (currentPage = page)"
     />
+
+    <TransportList :dealId="2" />
   </div>
 </template>
 

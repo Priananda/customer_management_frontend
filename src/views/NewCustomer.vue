@@ -9,7 +9,8 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-vue-next";
-import ConfirmModal from "@/components/ConfirmModalDelete.vue";
+import FilePreviewModal from "../components/FilePreviewModal.vue";
+import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import api from "../api/api";
@@ -51,6 +52,7 @@ const pageSize = ref(10);
 const totalItems = ref(0);
 
 // modal & form
+const showPreviewModal = ref(false);
 const loadingModal = ref(false);
 const showModal = ref(false);
 const editId = ref(null);
@@ -121,31 +123,55 @@ const getSummary = async () => {
   }
 };
 
+// TERMASUK FITUR UPLOAD
 const submitForm = async () => {
   if (loadingModal.value) return;
   loadingModal.value = true;
 
   try {
-    // Gabungkan hotel array menjadi string
-    const payload = {
-      ...form.value,
-      hotel: form.value.hotel.join(", "),
-    };
+    const formData = new FormData();
 
+    // Append semua field form
+    Object.keys(form.value).forEach((key) => {
+      if (key === "hotel") {
+        formData.append(key, form.value[key].join(",")); // simpan hotel sebagai string
+      } else {
+        formData.append(key, form.value[key] ?? "");
+      }
+    });
+
+    // Append semua file baru
+    selectedFiles.value.forEach((file) => formData.append("files[]", file));
+
+    let res;
     if (editId.value) {
-      await api.put(`/new-customer/${editId.value}`, payload);
+      formData.append("_method", "PUT"); // ini penting
+      res = await api.post(
+        `/new-customer/${editId.value}/update-with-files`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      // Update preview file
+      existingFiles.value.push(...(res.data.files || []));
     } else {
-      await api.post("/new-customer", payload);
+      // Create customer baru + upload file
+      res = await api.post("/new-customer-with-files", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      existingFiles.value = res.data.files || [];
     }
 
     resetForm();
+    selectedFiles.value = [];
     await getNewCustomers();
     await getSummary();
     closeModal();
   } catch (err) {
     console.error("Error submitting form:", err);
+  } finally {
+    loadingModal.value = false;
   }
-  loadingModal.value = false;
 };
 
 const confirmDelete = async () => {
@@ -236,6 +262,7 @@ const openCreateModal = () => {
   showModal.value = true;
 };
 
+// TERMASUK FITUR UPLOAD
 const openEditModal = (customer) => {
   editId.value = customer.id;
 
@@ -243,14 +270,23 @@ const openEditModal = (customer) => {
     form.value[k] = customer[k] ?? "";
   });
 
-  // Pastikan hotel selalu array
   form.value.hotel = customer.hotel
     ? customer.hotel.split(",").map((h) => h.trim())
     : [""];
 
   form.value.pic = formatRole(authStore.user?.role);
 
+  fetchCustomerFiles(customer.id);
   showModal.value = true;
+};
+const fetchCustomerFiles = async (customerId) => {
+  try {
+    const res = await api.get(`/customer-files/${customerId}`);
+    existingFiles.value = res.data.files; // backend sudah kasih preview_url
+  } catch (err) {
+    console.error("Error fetching customer files:", err);
+    existingFiles.value = [];
+  }
 };
 
 function formatRole(role) {
@@ -261,6 +297,7 @@ function formatRole(role) {
     .join(" ");
 }
 
+// RESET FORM + UPLOAD
 const resetForm = () => {
   Object.keys(form.value).forEach((k) => {
     if (k === "hotel") {
@@ -270,10 +307,13 @@ const resetForm = () => {
     }
   });
   editId.value = null;
+  selectedFiles.value = [];
+  existingFiles.value = [];
 };
-
+// RESET FORM + UPLOAD
 const closeModal = () => {
   showModal.value = false;
+  showPreviewModal.value = false;
   resetForm();
 };
 
@@ -306,54 +346,6 @@ function selectModalProgress(val) {
   form.value.progress = val;
   showModalProgressDropdown.value = false;
 }
-
-const downloadCSV = () => {
-  const headers = [
-    "Date",
-    "Phone",
-    "Customer Name",
-    "Progress",
-    "PIC",
-    "Segmen",
-    "Via",
-    "Country",
-    "Social Media",
-    "Tour Packages",
-    "Check In",
-    "Check Out",
-    "Hotel",
-    "Notes",
-  ];
-
-  const rows = filteredCustomers.value.map((c) => [
-    c.date,
-    c.phone,
-    c.name,
-    c.progress,
-    c.pic,
-    c.segmen,
-    c.via,
-    c.country,
-    c.social_media_id,
-    c.tour_packages,
-    c.check_in,
-    c.check_out,
-    c.hotel,
-    c.notes,
-  ]);
-
-  const csvContent =
-    "data:text/csv;charset=utf-8," +
-    [headers, ...rows].map((e) => e.join(",")).join("\n");
-
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "new_customers.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
 
 function handleClickOutside(e) {
   const progress = document.getElementById("progress-dropdown");
@@ -419,6 +411,54 @@ const openHotelModal = (hotelStr) => {
     selectedHotels.value = [hotelStr]; // satu hotel tetap dibuat array
   }
   showHotelModal.value = true;
+};
+
+// FITUR FITUR UPLOAD
+const selectedFiles = ref([]);
+const existingFiles = ref([]);
+
+// Tambahkan file baru tanpa menimpa yang lama
+const handleFileChange = (e) => {
+  const newFiles = Array.from(e.target.files);
+  selectedFiles.value = [...selectedFiles.value, ...newFiles];
+};
+
+// Hapus file baru sebelum upload
+const removeSelectedFile = (index) => {
+  selectedFiles.value.splice(index, 1);
+};
+
+// Hapus file lama (sudah di backend)
+const removeExistingFile = async (fileId) => {
+  try {
+    await api.delete(`/customer-files/${fileId}`);
+    existingFiles.value = existingFiles.value.filter((f) => f.id !== fileId);
+  } catch (err) {
+    console.error("Error deleting file:", err);
+  }
+};
+// BUKA MODAL PREVIEW LOCAL KE DOMAIN
+const openFilePreview = async (customerId) => {
+  try {
+    const response = await api.get(`/customer-files/${customerId}`);
+
+    console.log("API response:", response.data);
+
+    existingFiles.value = response.data.files.map((f) => ({
+      id: f.id,
+      original_name: f.original_name,
+      preview_url: `http://127.0.0.1:8000${f.preview_url}`,
+    }));
+
+    showPreviewModal.value = true;
+  } catch (err) {
+    console.error("Error get files:", err);
+  }
+};
+
+// DOWLOAD PDF
+const downloadPdfAll = () => {
+  window.open("http://127.0.0.1:8000/customers/pdf-all", "_blank");
 };
 </script>
 
@@ -556,16 +596,16 @@ const openHotelModal = (hotelStr) => {
         </button>
       </div>
 
-      <div class="lg:col-span-5 flex gap-2 justify-end">
+      <div class="lg:col-span-5 flex gap-2 justify-end mb-4">
         <button
-          @click="downloadCSV"
-          class="bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
+          @click="downloadPdfAll"
+          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
         >
-          Download CSV
+          Download PDF
         </button>
         <button
           @click="resetFilters"
-          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow"
+          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold px-4 py-2 rounded-lg shadow"
         >
           <RotateCcw class="w-4 h-4" />
           Reset
@@ -580,10 +620,12 @@ const openHotelModal = (hotelStr) => {
       >
         <thead class="bg-blue-900 text-white">
           <tr>
+            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
+            <th class="px-4 py-3 text-left w-[12%]">File</th>
             <th class="px-4 py-3 text-left">No</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[12%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[14%]">Customer Name</th>
+            <th class="px-4 py-3 text-left w-[14%]">Guest Name</th>
             <th class="px-4 py-3 text-left w-[10%]">Progress</th>
             <th class="px-4 py-3 text-left w-[10%]">PIC</th>
             <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
@@ -601,7 +643,7 @@ const openHotelModal = (hotelStr) => {
 
         <tbody>
           <tr v-if="loading">
-            <td colspan="15" class="p-4">
+            <td colspan="18" class="p-4">
               <div class="space-y-2">
                 <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
                 <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
@@ -620,8 +662,41 @@ const openHotelModal = (hotelStr) => {
           <tr
             v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
-            class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
+            :class="{
+              'bg-blue-50': selectedCustomer?.id === c.id,
+              'cursor-pointer': true,
+              'border-b border-slate-200 hover:bg-blue-50 transition-colors': true,
+            }"
           >
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <!-- Button Edit -->
+                <button
+                  v-if="canEdit"
+                  @click="openEditModal(c)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Pencil class="w-4 h-4 text-orange-500" />
+                </button>
+
+                <!-- Button Delete -->
+                <button
+                  v-if="canEdit"
+                  @click="openDeleteModal(c.id)"
+                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                >
+                  <Trash2 class="w-4 h-4 text-red-600" />
+                </button>
+              </div>
+            </td>
+            <td>
+              <button
+                @click="openFilePreview(c.id)"
+                class="text-cyan-700 underline"
+              >
+                Lihat Semua File
+              </button>
+            </td>
             <td class="px-4 py-2">{{ i + 1 }}</td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               {{ c.date }}
@@ -726,6 +801,12 @@ const openHotelModal = (hotelStr) => {
         </tbody>
       </table>
     </div>
+
+    <FilePreviewModal
+      :show="showPreviewModal"
+      :files="existingFiles"
+      @close="showPreviewModal = false"
+    />
 
     <!-- Modal delete -->
     <ConfirmModal
@@ -1039,6 +1120,66 @@ const openHotelModal = (hotelStr) => {
                     class="min-h-[100px] p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
                     placeholder="Notes"
                   ></textarea>
+                </div>
+
+                <!-- Upload Files -->
+                <div class="flex flex-col mb-3 col-span-2">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                    >Upload Files</label
+                  >
+                  <input
+                    type="file"
+                    multiple
+                    @change="handleFileChange"
+                    class="p-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <!-- Existing files (backend) -->
+                <div
+                  class="flex flex-wrap gap-2 mb-3"
+                  v-if="existingFiles.length"
+                >
+                  <div
+                    v-for="file in existingFiles"
+                    :key="file.id"
+                    class="p-2 border rounded bg-slate-100 flex items-center justify-between"
+                  >
+                    <a
+                      :href="file.preview_url"
+                      target="_blank"
+                      class="truncate max-w-[150px]"
+                      >{{ file.original_name }}</a
+                    >
+                    <button
+                      type="button"
+                      @click="removeExistingFile(file.id)"
+                      class="text-red-500"
+                    >
+                      x
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Selected files (belum diupload) -->
+                <div
+                  class="flex flex-wrap gap-2 mb-3"
+                  v-if="selectedFiles.length"
+                >
+                  <div
+                    v-for="(file, index) in selectedFiles"
+                    :key="index"
+                    class="p-2 border rounded bg-slate-100 flex items-center justify-between"
+                  >
+                    <span class="truncate max-w-[150px]">{{ file.name }}</span>
+                    <button
+                      type="button"
+                      @click="removeSelectedFile(index)"
+                      class="text-red-500"
+                    >
+                      x
+                    </button>
+                  </div>
                 </div>
               </template>
 

@@ -119,7 +119,7 @@ function handleLinkClick() {
             class="flex items-center justify-between w-full px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
           >
             <div class="flex items-center gap-3">
-              <UserPlus class="w-5 h-5" /> Customer
+              <UserPlus class="w-5 h-5" /> CS Management
             </div>
             <ChevronDown
               :class="[
@@ -147,7 +147,7 @@ function handleLinkClick() {
         </div>
 
         <!-- Management Menu -->
-        <div v-if="['admin', 'super_admin'].includes(role)">
+        <!-- <div v-if="['admin', 'super_admin'].includes(role)">
           <button
             @click="toggleMenu('management')"
             class="flex items-center justify-between w-full px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
@@ -186,7 +186,7 @@ function handleLinkClick() {
               View Data Admin
             </router-link>
           </div>
-        </div>
+        </div> -->
 
         <!-- Upload data CSV -->
         <!-- <div v-if="['pic', 'staff', 'admin', 'super_admin'].includes(role)">

@@ -95,65 +95,6 @@ const uniqueSegmens = computed(() => {
   return Array.from(seg);
 });
 
-// CSV download
-const downloadCSV = () => {
-  const headers = [
-    "Date",
-    "Phone",
-    "Name",
-    "Progress",
-    "PIC",
-    "Segmen",
-    "Via",
-    "Country",
-    "Social Media ID",
-    "Tour Packages",
-    "Check In",
-    "Check Out",
-    "Hotel",
-
-    "Handler",
-    "Link Drive",
-    "Total Pax",
-    "Activity",
-    "Payment Status",
-
-    "Notes",
-  ];
-  const rows = filteredCustomers.value.map((c) => [
-    c.date,
-    c.phone,
-    c.name,
-    c.progress,
-    c.pic,
-    c.segmen,
-    c.via,
-    c.country,
-    c.social_media_id,
-    c.tour_packages,
-    c.check_in,
-    c.check_out,
-    c.hotel,
-
-    c.deal?.handler ?? "",
-    c.deal?.link_drive ?? "",
-    c.deal?.total_pax ?? "",
-    c.deal?.activity ?? "",
-    c.deal?.payment_status ?? "",
-
-    c.notes,
-  ]);
-  const csvContent =
-    "data:text/csv;charset=utf-8," +
-    [headers, ...rows].map((e) => e.join(",")).join("\n");
-  const link = document.createElement("a");
-  link.href = encodeURI(csvContent);
-  link.setAttribute("download", "view_data_admin.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
 // Reset filters
 const resetFilters = () => {
   searchKeyword.value = "";
@@ -305,12 +246,6 @@ const progressColor = (progress) => {
       </div>
 
       <div class="lg:col-span-5 flex gap-2 justify-end">
-        <button
-          @click="downloadCSV"
-          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
-        >
-          Download CSV
-        </button>
         <button
           @click="resetFilters"
           class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow"

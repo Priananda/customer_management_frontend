@@ -7,10 +7,7 @@ import LoginAdmin from '../views/LoginAdmin.vue';
 import LoginSuperAdmin from '../views/LoginSuperAdmin.vue';
 import NewCustomer from '../views/NewCustomer.vue';
 import DealCustomer from '../views/DealCustomer.vue';
-import ViewDataPIC from '../views/ViewDataPIC.vue';
-import ViewDataStaff from '../views/ViewDataStaff.vue';
-import ViewDataAdmin from '../views/ViewDataAdmin.vue';
-import UploadCSV from '../views/UploadCSV.vue';
+
 
 import { authGuard } from './middleware.js';
 
@@ -39,26 +36,8 @@ const routes = [
         component: DealCustomer,
         meta: { allowedRoles: ['pic','staff','admin','super_admin'] }
       },
-      { 
-        path: 'view-data-pic', 
-        component: ViewDataPIC,
-        meta: { allowedRoles: ['admin','super_admin'] }
-      },
-      { 
-        path: 'view-data-staff', 
-        component: ViewDataStaff,
-        meta: { allowedRoles: ['admin','super_admin'] }
-      },
-      { 
-        path: 'view-data-admin', 
-        component: ViewDataAdmin,
-        meta: { allowedRoles: ['super_admin'] }
-      },
-      //  { 
-      //   path: 'upload-csv', 
-      //   component: UploadCSV,
-      //   meta: { allowedRoles: ['pic','staff','admin','super_admin'] }
-      // },
+      
+     
 
       { path: '', redirect: 'new-customer' }
     ]

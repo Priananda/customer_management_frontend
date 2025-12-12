@@ -213,11 +213,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
-
-// Download CSV
-const downloadCsv = () => {
-  window.open(`${api.defaults.baseURL}/new-customer/export-csv`, "_blank");
-};
 </script>
 
 <template>
@@ -290,7 +285,7 @@ const downloadCsv = () => {
         <p class="font-medium text-sm sm:text-base">Today's Report</p>
         <button
           class="underline text-blue-600 hover:text-blue-800 text-sm sm:text-base"
-          @click="downloadCsv"
+          @click=""
         >
           Download CSV
         </button>
