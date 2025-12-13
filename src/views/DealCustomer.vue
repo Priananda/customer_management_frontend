@@ -7,11 +7,13 @@ import {
   Pencil,
   Trash2,
   RotateCcw,
+  ChevronRight,
 } from "lucide-vue-next";
 import TransportList from "@/components/TransportList.vue";
 import ConfirmModal from "@/components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import CustomerIdentity from "../components/CustomerIdentity.vue";
 import api from "../api/api";
 
 // State
@@ -101,6 +103,18 @@ const dealForm = ref({
   ],
 });
 
+const showProgress = ref(false);
+const progressOptions = ["on progress", "canceled", "deal"];
+
+const showCountryDropdown = ref(false);
+const countryOptions = [
+  "Indonesia",
+  "Malaysia",
+  "Singapore",
+  "Thailand",
+  "Vietnam",
+  "Philippines",
+];
 // Modal delete
 const showDeleteModal = ref(false);
 const selectedId = ref(null);
@@ -1046,13 +1060,41 @@ const downloadPdf = () => {
           <input v-model="editFormNewCustomer.name" class="input" />
         </div>
 
-        <div>
-          <label>Progress *</label>
-          <select v-model="editFormNewCustomer.progress" class="input">
-            <option value="On Progress">On Progress</option>
-            <option value="Canceled">Canceled</option>
-            <option value="Deal">Deal</option>
-          </select>
+        <div class="flex flex-col mb-3">
+          <label class="font-medium text-slate-700">Progress *</label>
+
+          <div class="relative">
+            <div
+              @click="showProgress = !showProgress"
+              class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer flex items-center justify-between"
+            >
+              <span class="text-slate-700">
+                {{ editFormNewCustomer.progress || "Select progress" }}
+              </span>
+
+              <ChevronRight
+                class="w-4 h-4 text-slate-500 transition-transform"
+                :class="showProgress ? 'rotate-90' : ''"
+              />
+            </div>
+
+            <ul
+              v-if="showProgress"
+              class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-48 overflow-y-auto"
+            >
+              <li
+                v-for="option in progressOptions"
+                :key="option"
+                @click="
+                  editFormNewCustomer.progress = option;
+                  showProgress = false;
+                "
+                class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+              >
+                {{ option }}
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div>
@@ -1070,9 +1112,41 @@ const downloadPdf = () => {
           <input v-model="editFormNewCustomer.via" class="input" />
         </div>
 
-        <div>
-          <label>Country *</label>
-          <input v-model="editFormNewCustomer.country" class="input" />
+        <div class="flex flex-col mb-3">
+          <label class="font-medium text-slate-700">Country *</label>
+
+          <div class="relative">
+            <div
+              @click="showCountryDropdown = !showCountryDropdown"
+              class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer flex items-center justify-between"
+            >
+              <span class="text-slate-700">
+                {{ editFormNewCustomer.country || "Select country" }}
+              </span>
+
+              <ChevronRight
+                class="w-4 h-4 text-slate-500 transition-transform"
+                :class="showCountryDropdown ? 'rotate-90' : ''"
+              />
+            </div>
+
+            <ul
+              v-if="showCountryDropdown"
+              class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-48 overflow-y-auto hide-scrollbar"
+            >
+              <li
+                v-for="country in countryOptions"
+                :key="country"
+                @click="
+                  editFormNewCustomer.country = country;
+                  showCountryDropdown = false;
+                "
+                class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+              >
+                {{ country }}
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div>
@@ -1558,30 +1632,28 @@ const downloadPdf = () => {
         <thead class="bg-blue-900 text-white">
           <tr>
             <th class="px-4 py-3 text-left w-[10%]">Actions</th>
-            <th class="px-4 py-3 text-left w-[12%]">File</th>
             <th class="px-4 py-3 text-left">No</th>
+            <th class="px-4 py-3 text-left w-[12%]">File</th>
             <th class="px-4 py-3 text-left w-[10%]">Date</th>
             <th class="px-4 py-3 text-left w-[10%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[12%]">Customer Name</th>
+            <th class="px-4 py-3 text-left w-[12%]">Guest Name</th>
             <th class="px-4 py-3 text-left w-[10%]">Progress</th>
-            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
-            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
-            <th class="px-4 py-3 text-left w-[10%]">via</th>
-            <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[10%]">Social Media</th>
-            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
             <th class="px-4 py-3 text-left w-[8%]">Check In</th>
             <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
-            <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
-
-            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
+            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
+            <th class="px-4 py-3 text-left w-[10%]">via</th>
+            <th class="px-4 py-3 text-left w-[10%]">Social Media</th>
+            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
             <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
-            <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
             <th class="px-4 py-3 text-left w-[10%]">Activity</th>
+            <th class="px-4 py-3 text-left w-[8%]">Pax</th>
+            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
+            <th class="px-4 py-3 text-left w-[8%]">Country</th>
+            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
+            <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
             <th class="px-4 py-3 text-left w-[10%]">Note Hotel</th>
             <th class="px-4 py-3 text-left w-[10%]">Note Resto</th>
             <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
-
             <th class="px-4 py-2">Guide</th>
             <th class="px-4 py-2">HP Guide</th>
             <th class="px-4 py-2">Driver</th>
@@ -1589,7 +1661,6 @@ const downloadPdf = () => {
             <th class="px-4 py-2">Note Operation</th>
             <th class="px-4 py-2">Report</th>
             <!-- <th class="px-4 py-2">Foto</th> -->
-
             <th class="px-4 py-3 text-left w-[10%]">Notes</th>
             <th class="px-4 py-3 text-left w-[10%]">Actions</th>
           </tr>
@@ -1648,6 +1719,7 @@ const downloadPdf = () => {
                 </button>
               </div>
             </td>
+            <td class="px-4 py-2">{{ i + 1 }}</td>
             <td>
               <button
                 @click="openFilePreview(d.deal_customer?.id)"
@@ -1656,8 +1728,6 @@ const downloadPdf = () => {
                 Lihat Semua File
               </button>
             </td>
-
-            <td class="px-4 py-2">{{ i + 1 }}</td>
 
             <!-- NEW CUSTOMER -->
             <td class="px-4 py-3">{{ d.new_customer?.date }}</td>
@@ -1675,12 +1745,10 @@ const downloadPdf = () => {
                 {{ d.new_customer?.progress }}
               </span>
             </td>
-
+            <td class="px-4 py-3">{{ d.new_customer?.check_in }}</td>
+            <td class="px-4 py-3">{{ d.new_customer?.check_out }}</td>
             <td class="px-4 py-3">{{ d.new_customer?.pic }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.segmen }}</td>
             <td class="px-4 py-3">{{ d.new_customer?.via }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.country }}</td>
-
             <td class="px-4 py-3">
               <a
                 :href="d.new_customer?.social_media_id"
@@ -1690,17 +1758,14 @@ const downloadPdf = () => {
                 {{ d.new_customer?.social_media_id }}
               </a>
             </td>
-
             <td class="px-4 py-3">{{ d.new_customer?.tour_packages }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.check_in }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.check_out }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.hotel }}</td>
-
-            <td>{{ d.deal_customer?.handler ?? "-" }}</td>
             <td>{{ d.deal_customer?.link_drive ?? "-" }}</td>
-            <td>{{ d.deal_customer?.total_pax ?? "-" }}</td>
             <td>{{ d.deal_customer?.activity ?? "-" }}</td>
-
+            <td>{{ d.deal_customer?.total_pax ?? "-" }}</td>
+            <td class="px-4 py-3">{{ d.new_customer?.segmen }}</td>
+            <td class="px-4 py-3">{{ d.new_customer?.country }}</td>
+            <td>{{ d.deal_customer?.handler ?? "-" }}</td>
+            <td class="px-4 py-3">{{ d.new_customer?.hotel }}</td>
             <td>{{ d.deal_customer?.note_hotel ?? "-" }}</td>
             <td>{{ d.deal_customer?.note_resto ?? "-" }}</td>
             <td>
@@ -1709,7 +1774,6 @@ const downloadPdf = () => {
               </span>
               <span v-else>-</span>
             </td>
-
             <!-- Guide -->
             <td class="px-4 py-3">
               <div
@@ -1719,7 +1783,6 @@ const downloadPdf = () => {
                 {{ tr.guide ?? "-" }}
               </div>
             </td>
-
             <!-- HP Guide -->
             <td class="px-4 py-3">
               <div
@@ -1729,7 +1792,6 @@ const downloadPdf = () => {
                 {{ tr.hp_guide ?? "-" }}
               </div>
             </td>
-
             <!-- Driver -->
             <td class="px-4 py-3">
               <div
@@ -1739,7 +1801,6 @@ const downloadPdf = () => {
                 {{ tr.driver ?? "-" }}
               </div>
             </td>
-
             <!-- HP Driver -->
             <td class="px-4 py-3">
               <div
@@ -1749,7 +1810,6 @@ const downloadPdf = () => {
                 {{ tr.hp_driver ?? "-" }}
               </div>
             </td>
-
             <!-- Note Operation -->
             <td class="px-4 py-3">
               <div
@@ -1759,7 +1819,6 @@ const downloadPdf = () => {
                 {{ tr.note_operation ?? "-" }}
               </div>
             </td>
-
             <!-- Report -->
             <td class="px-4 py-3">
               <div
@@ -1769,7 +1828,6 @@ const downloadPdf = () => {
                 {{ tr.report ?? "-" }}
               </div>
             </td>
-
             <!-- Foto -->
             <!-- <td class="px-4 py-3">
               <div
@@ -1792,9 +1850,7 @@ const downloadPdf = () => {
                 </span>
               </div>
             </td> -->
-
             <td class="px-4 py-3">{{ d.new_customer?.notes }}</td>
-
             <!-- ACTION BUTTONS -->
             <td class="px-4 py-3 whitespace-nowrap">
               <div class="flex items-center gap-2">
@@ -1940,6 +1996,7 @@ const downloadPdf = () => {
     />
 
     <TransportList :dealId="2" />
+    <CustomerIdentity :dealId="2" />
   </div>
 </template>
 

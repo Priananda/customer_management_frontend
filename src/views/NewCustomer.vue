@@ -31,6 +31,7 @@ const canEdit = ["admin", "staff", "super_admin", "pic"].includes(
 );
 
 // State
+const showCountryDropdown = ref(false);
 const newCustomers = ref([]);
 const summary = ref({
   total: 0,
@@ -411,6 +412,19 @@ const openHotelModal = (hotelStr) => {
     selectedHotels.value = [hotelStr]; // satu hotel tetap dibuat array
   }
   showHotelModal.value = true;
+};
+
+const countryOptions = [
+  "Indonesia",
+  "Malaysia",
+  "Singapore",
+  "Thailand",
+  "Vietnam",
+  "Philippines",
+];
+const selectCountry = (country) => {
+  form.value.country = country;
+  showCountryDropdown.value = false;
 };
 
 // FITUR FITUR UPLOAD
@@ -1001,7 +1015,7 @@ const downloadPdfAll = () => {
                 </div>
 
                 <!-- Country -->
-                <div class="flex flex-col mb-3">
+                <!-- <div class="flex flex-col mb-3">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
@@ -1012,6 +1026,43 @@ const downloadPdfAll = () => {
                     placeholder="Country"
                     class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
                   />
+                </div> -->
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Country <span class="text-red-500">*</span>
+                  </label>
+
+                  <div class="relative">
+                    <div
+                      @click="showCountryDropdown = !showCountryDropdown"
+                      class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
+                    >
+                      <span class="text-slate-700">
+                        {{ form.country || "Select country" }}
+                      </span>
+
+                      <ChevronRight
+                        class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
+                        :class="showCountryDropdown ? 'rotate-90' : 'rotate-0'"
+                      />
+                    </div>
+
+                    <ul
+                      v-if="showCountryDropdown"
+                      class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-48 overflow-y-auto hide-scrollbar"
+                    >
+                      <li
+                        v-for="country in countryOptions"
+                        :key="country"
+                        @click="selectCountry(country)"
+                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700"
+                      >
+                        {{ country }}
+                      </li>
+                    </ul>
+                  </div>
                 </div>
 
                 <!-- Social Media -->
