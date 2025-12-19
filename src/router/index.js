@@ -12,6 +12,9 @@ import DealCustomer from '../views/DealCustomer.vue';
 import { authGuard } from './middleware.js';
 
 const routes = [
+
+  { path: '/', redirect: '/login-admin' },
+
   // Public route
   { path: '/register-pic-staff', component: RegisterPICStaff },
   { path: '/login-pic-staff', component: LoginPICStaff },
@@ -44,7 +47,7 @@ const routes = [
   },
 
   // Fallback
-  { path: '/:pathMatch(.*)*', redirect: '/dashboard/home' }
+  { path: '/:pathMatch(.*)*', redirect: '/login-admin' }
 ];
 
 const router = createRouter({

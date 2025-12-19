@@ -8,9 +8,11 @@ import {
   Trash2,
   RotateCcw,
   ChevronRight,
+  X,
+  Download,
 } from "lucide-vue-next";
-import TransportList from "@/components/TransportList.vue";
-import ConfirmModal from "@/components/ConfirmModalDelete.vue";
+import TransportList from "..//components/TransportList.vue";
+import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import CustomerIdentity from "../components/CustomerIdentity.vue";
@@ -73,7 +75,7 @@ const editFormNewCustomer = ref({
   tour_packages: "",
   check_in: "",
   check_out: "",
-  hotel: "",
+  hotel: [""],
   notes: "",
 });
 
@@ -107,18 +109,109 @@ const showProgress = ref(false);
 const progressOptions = ["on progress", "canceled", "deal"];
 
 const showCountryDropdown = ref(false);
-const countryOptions = [
-  "Indonesia",
-  "Malaysia",
-  "Singapore",
-  "Thailand",
-  "Vietnam",
-  "Philippines",
-];
+
+/* input add country */
+const showEditCountryModal = ref(false);
+const newEditCountryInput = ref("");
+const newEditCountryCategory = ref("");
+const showEditCategoryDropdown = ref(false);
+
+/* data country */
+const countryCategories = ref({
+  Asia: ["India", "China", "Japan", "Korea Selatan"],
+  ASEAN: [
+    "Indonesia",
+    "Malaysia",
+    "Singapore",
+    "Thailand",
+    "Vietnam",
+    "Philippines",
+  ],
+  Eropa: ["Germany", "France", "Italy", "Spain", "United Kingdom"],
+  Amerika: ["USA", "Canada", "Brazil", "Argentina"],
+  Australia: ["Australia", "New Zealand"],
+});
+
+/* ================= ACTION ================= */
+
+// pilih country
+const selectEditCountry = (country) => {
+  editFormNewCustomer.value.country = country;
+  showEditCountryModal.value = false;
+};
+
+// hapus country
+const deleteEditCountry = (category, country) => {
+  countryCategories.value[category] = countryCategories.value[category].filter(
+    (c) => c !== country
+  );
+
+  if (editFormNewCustomer.value.country === country) {
+    editFormNewCustomer.value.country = "";
+  }
+};
+
+// close modal
+const closeEditCountryModal = () => {
+  showEditCountryModal.value = false;
+};
+
+// pilih kategori
+const selectEditCategory = (category) => {
+  newEditCountryCategory.value = category;
+  showEditCategoryDropdown.value = false;
+};
+
+/* ================= ALERT ================= */
+
+const alertMessageFormDeal = ref("");
+const alertColor = ref("red");
+
+const showAlertFormDeal = (message, color = "red") => {
+  alertMessageFormDeal.value = message;
+  alertColor.value = color;
+  setTimeout(() => (alertMessageFormDeal.value = ""), 4000);
+};
+
+/* ================= ADD COUNTRY ================= */
+
+const addNewEditCountryToCategory = () => {
+  const country = newEditCountryInput.value.trim();
+  const category = newEditCountryCategory.value;
+
+  if (!country && !category) {
+    showAlertFormDeal("Isi nama negara & pilih kategori!", "red");
+    return;
+  }
+
+  if (!country) {
+    showAlertFormDeal("Nama negara wajib diisi!", "red");
+    return;
+  }
+
+  if (!category) {
+    showAlertFormDeal("Pilih kategori negara!", "red");
+    return;
+  }
+
+  if (!countryCategories.value[category].includes(country)) {
+    countryCategories.value[category].push(country);
+  }
+
+  editFormNewCustomer.value.country = country;
+
+  newEditCountryInput.value = "";
+  newEditCountryCategory.value = "";
+  showEditCountryModal.value = false;
+};
+
 // Modal delete
 const showDeleteModal = ref(false);
 const selectedId = ref(null);
 const deleteType = ref(null);
+const deletedDealCustomerIds = ref(
+  JSON.parse(localStorage.getItem("deletedDealCustomerIds") || "[]")
+);
 
 const loadData = async () => {
   loading.value = true;
@@ -131,32 +224,41 @@ const loadData = async () => {
     newCustomers.value = ncRes.data?.data || [];
     deals.value = dcRes.data?.data || [];
 
-    // Build combinedData: hanya deal aktif
+    // 🔥 INI PENTING
+    deletedDealCustomerIds.value = dcRes.data?.deleted_new_customer_ids || [];
+
     combinedData.value = newCustomers.value
-      .filter((nc) => nc.progress?.toLowerCase() === "deal") // hanya customer deal aktif
+      .filter((nc) => nc.progress?.toLowerCase() === "deal")
       .map((nc) => {
         const deal = deals.value.find(
           (d) => Number(d.new_customer_id) === Number(nc.id)
         );
 
-        // Jika belum punya deal_customer, buat dummy deal
-        if (!deal) {
+        // ✅ ADA DEAL ASLI
+        if (deal) {
           return {
             new_customer: nc,
-            deal_customer: {
-              id: null,
-              new_customer_id: nc.id,
-              status: "deal-from-progress",
-              is_auto: true,
-            },
+            deal_customer: deal,
           };
         }
 
+        // ⛔ DEAL PERNAH DIHAPUS → JANGAN BUAT DUMMY
+        if (deletedDealCustomerIds.value.includes(nc.id)) {
+          return null;
+        }
+
+        // ✅ BOLEH DUMMY (BELUM PERNAH DIHAPUS)
         return {
           new_customer: nc,
-          deal_customer: deal,
+          deal_customer: {
+            id: null,
+            new_customer_id: nc.id,
+            status: "deal-from-progress",
+            is_auto: true,
+          },
         };
-      });
+      })
+      .filter(Boolean);
 
     totalItems.value = combinedData.value.length;
   } catch (e) {
@@ -169,6 +271,8 @@ const loadData = async () => {
     loading.value = false;
   }
 };
+
+// Urusan cancel
 
 const onSelectCustomer = () => {
   selectedCustomer.value = newCustomers.value.find(
@@ -195,107 +299,32 @@ const handleTransportFiles = (e, index) => {
   const files = Array.from(e.target.files);
   dealForm.value.transport[index].foto.push(...files);
 };
-const removeTransportFile = (transportIndex, fileIndex) => {
-  dealForm.transport[transportIndex].foto.splice(fileIndex, 1);
+// Hapus file baru (belum diupload) dari transport
+const removeTransportFile = (trIndex, fIndex) => {
+  const transport = dealForm.value.transport?.[trIndex];
+  if (!transport || !Array.isArray(transport.foto)) return;
+
+  // pastikan fIndex valid
+  if (fIndex < 0 || fIndex >= transport.foto.length) return;
+
+  transport.foto.splice(fIndex, 1);
 };
+const removeExistingTransportFile = (trIndex, fIndex, file) => {
+  const transport = dealForm.value.transport?.[trIndex];
+  if (!transport || !Array.isArray(transport.foto_existing)) return;
 
-// const handleSave = async () => {
-//   // ensure new_customer_id exists
-//   if (!dealForm.value.new_customer_id) {
-//     alertType.value = "error";
-//     alertMessage.value = "Pilih customer terlebih dahulu.";
-//     showAlert.value = true;
-//     setTimeout(() => (showAlert.value = false), 3000);
-//     return;
-//   }
+  if (fIndex < 0 || fIndex >= transport.foto_existing.length) return;
 
-//   const fd = new FormData();
-//   isLoading.value = true;
+  transport.foto_existing.splice(fIndex, 1);
 
-//   // always include new_customer_id
-//   fd.append("new_customer_id", dealForm.value.new_customer_id);
-
-//   // append other fields (skip null payment_status)
-//   Object.keys(dealForm.value).forEach((key) => {
-//     const val = dealForm.value[key];
-//     if (key === "payment_status") {
-//       if (val) fd.append(key, val);
-//     } else if (val !== null && val !== undefined) {
-//       fd.append(key, String(val));
-//     }
-//   });
-
-//   // ======================================
-//   // TRANSPORT — kirim semua input + files
-//   // ======================================
-//   dealForm.value.transport.forEach((tr, i) => {
-//     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
-//     fd.append(`transport[${i}][hp_guide]`, tr.hp_guide ?? "");
-//     fd.append(`transport[${i}][driver]`, tr.driver ?? "");
-//     fd.append(`transport[${i}][hp_driver]`, tr.hp_driver ?? "");
-//     fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
-//     fd.append(`transport[${i}][report]`, tr.report ?? "");
-
-//     // FILE MULTIPLE
-//     tr.foto.forEach((file) => {
-//       fd.append(`transport[${i}][foto][]`, file);
-//     });
-//   });
-
-//   // **PENTING: tambahkan file**
-//   dealSelectedFiles.value.forEach((file) => {
-//     fd.append("files[]", file);
-//   });
-
-//   try {
-//     let res;
-
-//     if (!dealForm.value.id) {
-//       res = await api.post("/deal-customer", fd, {
-//         headers: { "Content-Type": "multipart/form-data" },
-//       });
-//     } else {
-//       res = await api.post(
-//         `/deal-customer/${dealForm.value.id}?_method=PUT`,
-//         fd,
-//         {
-//           headers: { "Content-Type": "multipart/form-data" },
-//         }
-//       );
-//     }
-
-//     // GET the deal ID (baru dibuat)
-//     const dealId = res.data.data.id;
-
-//     // UPLOAD MULTIPLE FILE (Wajib!!)
-//     if (dealSelectedFiles.value.length > 0) {
-//       const fileForm = new FormData();
-//       dealSelectedFiles.value.forEach((f) => fileForm.append("files[]", f));
-//       await api.post(`/deal-customer-files/upload/${dealId}`, fileForm, {
-//         headers: { "Content-Type": "multipart/form-data" },
-//       });
-//     }
-
-//     alertType.value = "success";
-//     alertMessage.value = "Data berhasil disimpan!";
-//     showAlert.value = true;
-
-//     await loadData();
-//   } catch (error) {
-//     console.error("handleSave error:", error);
-//     // try to show backend validation if exists
-//     const msg =
-//       error?.response?.data?.message ||
-//       "Gagal menyimpan data! Silahkan cek input.";
-//     alertType.value = "error";
-//     alertMessage.value = msg;
-//     showAlert.value = true;
-//   } finally {
-//     isLoading.value = false;
-//     setTimeout(() => (showAlert.value = false), 3000);
-//     reset();
-//   }
-// };
+  // Optional: hapus di backend
+  if (file?.id) {
+    api
+      .delete(`/transport-files/${file.id}`)
+      .then(() => console.log("File deleted"))
+      .catch((err) => console.error(err));
+  }
+};
 
 const handleSave = async () => {
   if (!dealForm.value.new_customer_id) {
@@ -313,11 +342,25 @@ const handleSave = async () => {
   // 1. NEW CUSTOMER UPDATE
   // ==========================
   // Tambahkan ini di handleSave()
+  // if (editFormNewCustomer.value) {
+  //   Object.keys(editFormNewCustomer.value).forEach((key) => {
+  //     const val = editFormNewCustomer.value[key];
+
+  //     // pastikan val bukan object
+  //     if (val !== null && val !== undefined && typeof val !== "object") {
+  //       fd.append(`new_customer[${key}]`, String(val));
+  //     }
+  //   });
+  // }
   if (editFormNewCustomer.value) {
     Object.keys(editFormNewCustomer.value).forEach((key) => {
-      const val = editFormNewCustomer.value[key];
+      let val = editFormNewCustomer.value[key];
 
-      // pastikan val bukan object
+      // Convert hotel (array) menjadi string
+      if (key === "hotel" && Array.isArray(val)) {
+        val = val.join(",");
+      }
+
       if (val !== null && val !== undefined && typeof val !== "object") {
         fd.append(`new_customer[${key}]`, String(val));
       }
@@ -399,6 +442,7 @@ const handleSave = async () => {
 
     isEditing.value = false;
     console.log("response:", res.data);
+    await loadData();
   } catch (error) {
     console.error("error:", error?.response?.data || error);
   } finally {
@@ -411,9 +455,22 @@ const confirmDelete = async () => {
   try {
     if (deleteType.value === "deal") {
       await api.delete(`/deal-customer/${selectedId.value}`);
+
+      // 🔥 simpan new_customer_id yang deal-nya dihapus
+      const row = combinedData.value.find(
+        (r) => r.deal_customer?.id === selectedId.value
+      );
+      if (row?.new_customer?.id) {
+        deletedDealCustomerIds.value.push(row.new_customer.id);
+        localStorage.setItem(
+          "deletedDealCustomerIds",
+          JSON.stringify(deletedDealCustomerIds.value)
+        );
+      }
     } else {
       await api.delete(`/new-customer/${selectedId.value}`);
     }
+
     await loadData();
     showDeleteModal.value = false;
   } catch (error) {
@@ -469,6 +526,7 @@ const filteredDeals = computed(() => {
     // 1. Gabungkan field Customer + Deal
     // ------------------------------
     const customerDealFields = [
+      c.email,
       c.name,
       c.phone,
       c.date,
@@ -598,27 +656,33 @@ onMounted(() => {
 });
 
 const progressColor = (status) => {
-  if (!status) return "bg-slate-100 text-slate-600";
+  if (!status) return "bg-slate-100 text-slate-600 border border-slate-200";
 
   const s = status.toString().trim().toUpperCase();
 
   switch (s) {
     case "NEW":
-      return "bg-slate-200 text-slate-700";
+      return "bg-slate-200 text-slate-700 border border-slate-200";
+
     case "FOLLOW UP":
     case "FOLLOWUP":
-      return "bg-yellow-200 text-yellow-800";
+      return "bg-yellow-200 text-yellow-800 border border-yellow-200";
+
     case "PROSPECT":
-      return "bg-blue-200 text-blue-800";
+      return "bg-blue-200 text-blue-800 border border-blue-200";
+
     case "DEAL":
-      return "bg-green-200 text-green-800";
+      return "bg-green-100 text-green-800 border border-green-200";
+
     case "LOST":
     case "CANCELED":
-      return "bg-red-200 text-red-800";
+      return "bg-red-100 text-red-800 border border-red-200";
+
     case "ON PROGRESS":
-      return "bg-blue-200 text-blue-800";
+      return "bg-blue-100 text-blue-800 border border-blue-200";
+
     default:
-      return "bg-slate-100 text-slate-600";
+      return "bg-slate-100 text-slate-600 border border-slate-200";
   }
 };
 
@@ -752,16 +816,30 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
       }));
     }
 
-    // --- 2. Load deal customer files ---
+    // --- 2. Load deal customer files YANG LAMA BISA PREVIEW TRANSPORT---
+    // if (dealCustomerId) {
+    //   const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
+    //   dealFilesApi = (dealRes.data.files ?? []).map((f) => ({
+    //     id: `dc-${f.real_id}`,
+    //     real_id: f.real_id,
+    //     original_name: f.original_name,
+    //     preview_url: `${API_BASE}${f.preview_url}`,
+    //     source: "deal_customer",
+    //   }));
+    // }
+
     if (dealCustomerId) {
       const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
-      dealFilesApi = (dealRes.data.files ?? []).map((f) => ({
-        id: `dc-${f.real_id}`,
-        real_id: f.real_id,
-        original_name: f.original_name,
-        preview_url: `${API_BASE}${f.preview_url}`,
-        source: "deal_customer",
-      }));
+
+      dealFilesApi = (dealRes.data.files ?? [])
+        .filter((f) => f.real_id) // ⬅️ FILTER KUNCI
+        .map((f) => ({
+          id: `dc-${f.real_id}`,
+          real_id: f.real_id,
+          original_name: f.original_name,
+          preview_url: `${API_BASE}${f.preview_url}`,
+          source: "deal_customer",
+        }));
     }
 
     // --- 3. FILTER hanya jika file DEAL punya nama sama
@@ -775,7 +853,9 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
     });
 
     // --- 4. Gabungkan ---
-    allFiles.value = [...newFilesApi, ...filteredDealFiles];
+    allFiles.value = [...newFilesApi, ...filteredDealFiles].filter(
+      (f) => f.source !== "transport"
+    );
   } catch (err) {
     console.error("Load files failed:", err);
   }
@@ -784,7 +864,7 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
 const removeDealFile = async (file) => {
   if (!file?.id || file.source !== "deal_customer") return;
 
-  if (!confirm("Yakin ingin menghapus file ini?")) return;
+  // if (!confirm("Yakin ingin menghapus file ini?")) return;
 
   try {
     await api.delete(`/deal-customer-files/${file.id.replace("dc-", "")}`);
@@ -793,6 +873,10 @@ const removeDealFile = async (file) => {
     console.error("Delete failed:", e);
   }
 };
+const isDealFile = (file) => {
+  return String(file.source).trim() === "deal_customer";
+};
+
 const editDeal = (d) => {
   isEditing.value = true;
 
@@ -801,7 +885,7 @@ const editDeal = (d) => {
   // =============================
   const transportData = d.deal_customer?.transports?.length
     ? d.deal_customer.transports.map((t) => ({
-        id: t.id, // ✔ PENTING: kirim ID
+        id: t.id,
         guide: t.guide ?? "",
         hp_guide: t.hp_guide ?? "",
         driver: t.driver ?? "",
@@ -809,8 +893,8 @@ const editDeal = (d) => {
         note_operation: t.note_operation ?? "",
         report: t.report ?? "",
 
-        foto_existing: t.foto ?? [], // ✔ Foto lama masuk sini
-        foto: [], // file baru
+        foto_existing: t.foto ?? [],
+        foto: [],
       }))
     : [
         {
@@ -821,7 +905,7 @@ const editDeal = (d) => {
           hp_driver: "",
           note_operation: "",
           report: "",
-          foto_existing: [], // kosong
+          foto_existing: [],
           foto: [],
         },
       ];
@@ -848,6 +932,7 @@ const editDeal = (d) => {
   // EDIT CUSTOMER INFO
   // =============================
   editFormNewCustomer.value = {
+    email: d.new_customer?.email ?? "",
     date: d.new_customer?.date ?? "",
     phone: d.new_customer?.phone ?? "",
     name: d.new_customer?.name ?? "",
@@ -860,7 +945,10 @@ const editDeal = (d) => {
     tour_packages: d.new_customer?.tour_packages ?? "",
     check_in: d.new_customer?.check_in ?? "",
     check_out: d.new_customer?.check_out ?? "",
-    hotel: d.new_customer?.hotel ?? "",
+    hotel: d.new_customer?.hotel
+      ? d.new_customer.hotel.split(",").map((h) => h.trim())
+      : [""],
+
     notes: d.new_customer?.notes ?? "",
   };
 
@@ -873,13 +961,67 @@ const editDeal = (d) => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
+const addEditHotel = () => {
+  if (!Array.isArray(editFormNewCustomer.value.hotel)) {
+    editFormNewCustomer.value.hotel = [""];
+  }
+  editFormNewCustomer.value.hotel.push("");
+};
+
+const removeEditHotel = (index) => {
+  if (editFormNewCustomer.value.hotel.length > 1) {
+    editFormNewCustomer.value.hotel.splice(index, 1);
+  }
+};
+
 // // file yang sudah ada (backend)
 // const dealExistingFiles = ref([]);
 
 // Saat memilih file baru
-const handleDealFileChange = (e) => {
+const showDealAlert = ref(false);
+const dealAlertMessage = ref("");
+const handleDealFileChange = async (e) => {
   const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  // pastikan deal sudah ada
+  if (!dealForm.value.id) {
+    dealAlertMessage.value =
+      "Upload file deal customer gagal!, harap input data deal customer terlebih dahulu. Keluar";
+    showDealAlert.value = true;
+
+    setTimeout(() => {
+      showDealAlert.value = false;
+    }, 6000);
+
+    return;
+  }
+
+  // tampilkan dulu di UI
   dealSelectedFiles.value.push(...files);
+
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files[]", file));
+
+  try {
+    await api.post(
+      `/deal-customer-files/upload/${dealForm.value.id}`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+
+    // reload preview dari backend
+    await loadFiles(dealForm.value.id, dealForm.value.new_customer_id);
+
+    // kosongkan preview local
+    dealSelectedFiles.value = [];
+  } catch (err) {
+    console.error("Upload gagal:", err);
+    alert("Upload file gagal");
+  }
+
+  // reset input supaya file yang sama bisa dipilih lagi
+  e.target.value = "";
 };
 
 // Hapus file yang baru dipilih (belum diupload)
@@ -915,33 +1057,62 @@ const modalFiles = ref([]);
 //     console.error(err);
 //   }
 // };
+// const openFilePreview = async (dealId) => {
+//   try {
+//     const res = await api.get(`/deal-customer-files/${dealId}`);
+
+//     console.log("Res data dari backend:", res.data.files); // 🔍 cek semua file
+
+//     modalFiles.value = res.data.files.map((f) => {
+//       console.log("File diproses:", f); // 🔍 cek setiap file satu per satu
+//       return {
+//         ...f,
+//         preview_url: f.preview_url, // jangan tambah API_BASE kalau backend sudah asset()
+//       };
+//     });
+
+//     console.log("Modal files:", modalFiles.value); // 🔍 cek array yang akan dipakai di template
+
+//     showFileModal.value = true;
+//   } catch (err) {
+//     console.error(err);
+//   }
+// };
 const openFilePreview = async (dealId) => {
+  modalFiles.value = [];
+  showFileModal.value = true;
+
+  if (!dealId) return;
+
   try {
     const res = await api.get(`/deal-customer-files/${dealId}`);
-
-    console.log("Res data dari backend:", res.data.files); // 🔍 cek semua file
-
-    modalFiles.value = res.data.files.map((f) => {
-      console.log("File diproses:", f); // 🔍 cek setiap file satu per satu
-      return {
-        ...f,
-        preview_url: f.preview_url, // jangan tambah API_BASE kalau backend sudah asset()
-      };
-    });
-
-    console.log("Modal files:", modalFiles.value); // 🔍 cek array yang akan dipakai di template
-
-    showFileModal.value = true;
+    modalFiles.value = res.data.files || [];
   } catch (err) {
-    console.error(err);
+    console.error("Gagal load file:", err);
+    modalFiles.value = [];
   }
 };
 
 const closeFileModal = () => {
   showFileModal.value = false;
 };
+
 // const downloadFile = (file) => {
 //   const url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
+//   window.open(url, "_blank");
+// };
+
+// const downloadFile = (file) => {
+//   let url = "";
+
+//   if (file.source === "new_customer" || file.source === "deal_customer") {
+//     // pakai real_id untuk endpoint
+//     url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
+//   } else if (file.source === "transport") {
+//     // pakai transport_id + file_name
+//     url = `http://127.0.0.1:8000/files/download/transport/${file.transport_id}/${file.file_name}`;
+//   }
+
 //   window.open(url, "_blank");
 // };
 
@@ -949,25 +1120,29 @@ const downloadFile = (file) => {
   let url = "";
 
   if (file.source === "new_customer" || file.source === "deal_customer") {
-    // pakai real_id untuk endpoint
     url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
   } else if (file.source === "transport") {
-    // pakai transport_id + file_name
     url = `http://127.0.0.1:8000/files/download/transport/${file.transport_id}/${file.file_name}`;
+  } else if (file.source === "customer_identity") {
+    // ✅ TAMBAHKAN INI
+    url = `http://127.0.0.1:8000/files/download/customer-identity/${file.original_name}`;
   }
 
-  window.open(url, "_blank");
+  if (url) {
+    window.open(url, "_blank");
+  }
 };
 
 // FITUR CANCELED BERAWAL DARI DEAL KE CANCEL DI HALAMAN DEAL CUSTOMER
 const selectedCustomerToCancel = ref(null);
 const isCancelModalOpen = ref(false);
+const isLoadingModalCancel = ref(false);
 
 const openCancelModal = (row) => {
   const customer = row?.new_customer;
 
   if (!customer) {
-    console.error("❌ new_customer tidak ditemukan", row);
+    console.error("new_customer tidak ditemukan", row);
     return;
   }
 
@@ -985,15 +1160,18 @@ const cancelDeal = async () => {
   try {
     const customer = selectedCustomerToCancel.value;
     if (!customer?.id) return;
+    isLoadingModalCancel.value = true;
 
     await api.put(`/new-customer/${customer.id}`, { progress: "canceled" });
 
-    await loadData(); // reload untuk hapus dari Deal Customer
+    await loadData();
     isCancelModalOpen.value = false;
     selectedCustomerToCancel.value = null;
   } catch (err) {
     console.error("Error canceling deal:", err);
     alert("Gagal membatalkan deal.");
+  } finally {
+    isLoadingModalCancel.value = false;
   }
 };
 
@@ -1002,10 +1180,87 @@ const cancelDeal = async () => {
 const downloadPdf = () => {
   window.open("http://127.0.0.1:8000/deal-customer/pdf", "_blank");
 };
+
+const showHotelModal = ref(false);
+const currentHotel = ref("");
+
+const openHotelModal = (hotelData) => {
+  if (!hotelData) {
+    currentHotel.value = ["Tidak ada data hotel"];
+  } else if (Array.isArray(hotelData)) {
+    currentHotel.value = hotelData;
+  } else {
+    // misal hotelData string "A, B, C"
+    currentHotel.value = hotelData.split(",").map((h) => h.trim());
+  }
+  showHotelModal.value = true;
+};
+
+const closeHotelModal = () => {
+  showHotelModal.value = false;
+  currentHotel.value = "";
+};
+
+const instagramUrl = (val) => {
+  if (!val) return "#";
+  if (val.startsWith("http")) return val;
+  return `https://www.instagram.com/${val.replace("@", "")}`;
+};
+// State
+const dropdownOpen = ref(false);
+const showModal = ref(false);
+
+// Dropdown options
+const options = [
+  { label: "DP", value: "dp" },
+  { label: "Lunas", value: "lunas" },
+];
+const toggleDropdown = () => {
+  dropdownOpen.value = !dropdownOpen.value;
+};
+const selectOption = (value) => {
+  dealForm.value.payment_status = value;
+  dropdownOpen.value = false;
+  showModal.value = true;
+};
+
+const isImage = (filename = "") => {
+  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
+};
+
+const previewFiles = computed(() => {
+  return allFiles.value.filter((f) => f.source !== "transport");
+});
 </script>
 
 <template>
   <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
+    <!-- ALERT DEAL -->
+    <Transition
+      enter-active-class="transition-all duration-300 ease-out"
+      enter-from-class="-translate-y-6 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition-all duration-200 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="-translate-y-6 opacity-0"
+    >
+      <div
+        v-if="showDealAlert"
+        class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-xl bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center justify-between"
+      >
+        <span class="text-sm font-medium">
+          {{ dealAlertMessage }}
+        </span>
+
+        <button
+          @click="showDealAlert = false"
+          class="ml-4 text-white hover:text-red-200"
+        >
+          ✕
+        </button>
+      </div>
+    </Transition>
+
     <transition
       enter-from-class="opacity-0 -translate-y-2"
       enter-active-class="transition-all duration-300"
@@ -1045,23 +1300,62 @@ const downloadPdf = () => {
       </h3>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
-        <div>
-          <label>Date *</label>
-          <input v-model="editFormNewCustomer.date" type="date" class="input" />
-        </div>
+        <div class="flex flex-col">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Date
+          </label>
 
-        <div>
-          <label>Phone *</label>
-          <input v-model="editFormNewCustomer.phone" class="input" />
-        </div>
-
-        <div>
-          <label>Customer Name *</label>
-          <input v-model="editFormNewCustomer.name" class="input" />
+          <input
+            v-model="editFormNewCustomer.date"
+            type="date"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
         </div>
 
         <div class="flex flex-col mb-3">
-          <label class="font-medium text-slate-700">Progress *</label>
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Phone
+          </label>
+
+          <input
+            v-model="editFormNewCustomer.phone"
+            placeholder="Phone"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
+        </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Email
+          </label>
+
+          <input
+            v-model="editFormNewCustomer.email"
+            placeholder="Email Guest Name"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
+        </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Guest Name
+          </label>
+
+          <input
+            v-model="editFormNewCustomer.name"
+            placeholder="Guest Name"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
+        </div>
+
+        <div class="flex flex-col mb-3">
+          <label class="font-medium text-slate-700">Progress </label>
 
           <div class="relative">
             <div
@@ -1097,105 +1391,304 @@ const downloadPdf = () => {
           </div>
         </div>
 
-        <div>
-          <label>PIC *</label>
-          <input v-model="editFormNewCustomer.pic" class="input" />
-        </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            PIC
+          </label>
 
-        <div>
-          <label>Segmen *</label>
-          <input v-model="editFormNewCustomer.segmen" class="input" />
+          <input
+            v-model="editFormNewCustomer.pic"
+            placeholder="PIC"
+            readonly
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 bg-slate-100 cursor-not-allowed focus:outline-none"
+          />
         </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Segmen
+          </label>
 
-        <div>
-          <label>Via *</label>
-          <input v-model="editFormNewCustomer.via" class="input" />
+          <input
+            v-model="editFormNewCustomer.segmen"
+            placeholder="Segmen"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
+        </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Via
+          </label>
+
+          <input
+            v-model="editFormNewCustomer.via"
+            placeholder="Via"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
         </div>
 
         <div class="flex flex-col mb-3">
-          <label class="font-medium text-slate-700">Country *</label>
+          <label class="font-medium text-slate-700"> Country </label>
 
-          <div class="relative">
-            <div
-              @click="showCountryDropdown = !showCountryDropdown"
-              class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer flex items-center justify-between"
-            >
-              <span class="text-slate-700">
-                {{ editFormNewCustomer.country || "Select country" }}
-              </span>
+          <div
+            @click="showEditCountryModal = true"
+            class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer flex items-center justify-between hover:shadow-sm transition"
+          >
+            <span class="text-slate-700 truncate">
+              {{ editFormNewCustomer.country || "Select country" }}
+            </span>
 
-              <ChevronRight
-                class="w-4 h-4 text-slate-500 transition-transform"
-                :class="showCountryDropdown ? 'rotate-90' : ''"
-              />
-            </div>
-
-            <ul
-              v-if="showCountryDropdown"
-              class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-48 overflow-y-auto hide-scrollbar"
-            >
-              <li
-                v-for="country in countryOptions"
-                :key="country"
-                @click="
-                  editFormNewCustomer.country = country;
-                  showCountryDropdown = false;
-                "
-                class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
-              >
-                {{ country }}
-              </li>
-            </ul>
+            <ChevronRight
+              class="w-4 h-4 text-slate-500 transition-transform"
+              :class="showEditCountryModal ? 'rotate-90' : ''"
+            />
           </div>
         </div>
+        <transition name="modal-zoom" appear>
+          <div
+            v-if="showEditCountryModal"
+            class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            @click.self="closeEditCountryModal"
+          >
+            <div
+              class="bg-white rounded-xl max-w-xl w-full shadow-2xl relative overflow-hidden"
+            >
+              <!-- ALERT -->
+              <div
+                v-if="alertMessageFormDeal"
+                class="absolute top-16 left-1/2 -translate-x-1/2 px-5 py-2 rounded-lg text-white font-semibold text-sm z-50"
+                :class="{
+                  'bg-red-600': alertColor === 'red',
+                  'bg-green-600': alertColor === 'green',
+                  'bg-yellow-600': alertColor === 'yellow',
+                }"
+              >
+                {{ alertMessageFormDeal }}
+              </div>
 
-        <div>
-          <label>Social Media *</label>
-          <input v-model="editFormNewCustomer.social_media_id" class="input" />
+              <!-- HEADER -->
+              <div class="px-6 py-5 flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-slate-800">
+                  Select Country
+                </h3>
+                <button
+                  @click="closeEditCountryModal"
+                  class="absolute top-4 right-4 text-gray-700 hover:text-gray-800 text-xl transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <!-- INPUT ADD -->
+              <div
+                class="mt-5 px-6 py-5 flex flex-col sm:flex-row gap-3 items-center"
+              >
+                <input
+                  v-model="newEditCountryInput"
+                  placeholder="Add new country"
+                  class="flex-1 p-3 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring focus:ring-blue-200 outline-none transition"
+                />
+
+                <div class="relative w-full sm:w-40">
+                  <div
+                    @click="
+                      showEditCategoryDropdown = !showEditCategoryDropdown
+                    "
+                    class="p-3 bg-white rounded-lg border border-slate-200 cursor-pointer flex justify-between items-center transition"
+                  >
+                    <span class="text-slate-700">{{
+                      newEditCountryCategory || "Select category"
+                    }}</span>
+                    <svg
+                      class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
+                      :class="showCategoryDropdown ? 'rotate-180' : 'rotate-0'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                      ></path>
+                    </svg>
+                  </div>
+
+                  <ul
+                    v-if="showEditCategoryDropdown"
+                    class="absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-40 overflow-y-auto z-50 hidden-scroll"
+                  >
+                    <li
+                      v-for="(v, key) in countryCategories"
+                      :key="key"
+                      @click="selectEditCategory(key)"
+                      class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm"
+                    >
+                      {{ key }}
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  @click="addNewEditCountryToCategory"
+                  class="px-6 py-3 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white rounded-lg shadow-md transition w-full sm:w-auto font-semibold"
+                >
+                  Add
+                </button>
+              </div>
+
+              <!-- LIST -->
+              <div
+                class="px-6 max-h-80 overflow-y-auto space-y-4 hidden-scroll"
+              >
+                <template
+                  v-for="(countries, category) in countryCategories"
+                  :key="category"
+                >
+                  <div class="bg-white rounded-xl shadow-sm p-4">
+                    <div
+                      class="font-semibold text-slate-700 mb-3 text-md border-b border-gray-100 pb-2"
+                    >
+                      {{ category }}
+                    </div>
+
+                    <div
+                      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"
+                    >
+                      <div
+                        v-for="country in countries"
+                        :key="country"
+                        class="flex items-center justify-between px-4 py-2 rounded-full bg-linear-to-r from-indigo-100 to-blue-100 text-blue-900 font-semibold shadow-md hover:shadow-lg hover:scale-105 transform transition-all cursor-pointer"
+                      >
+                        <!-- SELECT COUNTRY -->
+                        <span
+                          class="truncate"
+                          @click="selectEditCountry(country)"
+                        >
+                          {{ country }}
+                        </span>
+
+                        <!-- DELETE ICON (ALWAYS VISIBLE) -->
+                        <button
+                          @click.stop="deleteEditCountry(category, country)"
+                          class="ml-3 text-red-600 hover:text-red-700 text-sm font-bold transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Social Media ID
+          </label>
+
+          <input
+            v-model="editFormNewCustomer.social_media_id"
+            placeholder="Social Media ID"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
         </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Tour Packages
+          </label>
 
-        <div>
-          <label>Tour Packages *</label>
-          <input v-model="editFormNewCustomer.tour_packages" class="input" />
+          <input
+            v-model="editFormNewCustomer.tour_packages"
+            placeholder="Tour Packages"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+          />
         </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Check In
+          </label>
 
-        <div>
-          <label>Check In *</label>
           <input
             v-model="editFormNewCustomer.check_in"
             type="date"
-            class="input"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
           />
         </div>
+        <div class="flex flex-col mb-3">
+          <label
+            class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+          >
+            Check Out
+          </label>
 
-        <div>
-          <label>Check Out *</label>
           <input
             v-model="editFormNewCustomer.check_out"
             type="date"
-            class="input"
+            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
           />
         </div>
 
-        <div>
-          <label>Hotel *</label>
-          <input v-model="editFormNewCustomer.hotel" class="input" />
-        </div>
+        <!-- HOTEL -->
+        <div class="mb-5">
+          <label
+            class="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-800"
+          >
+            Hotel
+          </label>
 
-        <div class="col-span-2">
-          <label>Notes</label>
-          <textarea
-            v-model="editFormNewCustomer.notes"
-            class="input"
-          ></textarea>
+          <!-- HOTEL LIST -->
+          <div
+            v-for="(h, index) in editFormNewCustomer.hotel || []"
+            :key="index"
+            class="group flex items-center gap-3 mb-3"
+          >
+            <input
+              v-model="editFormNewCustomer.hotel[index]"
+              placeholder="Enter name hotel"
+              class="w-full p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+            />
+
+            <button
+              v-if="(editFormNewCustomer.hotel || []).length > 1"
+              @click="removeEditHotel(index)"
+              type="button"
+              class="w-10 h-10 text-red-600"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- ADD BUTTON -->
+          <button
+            type="button"
+            @click="addEditHotel"
+            class="cursor-pointer inline-flex items-center gap-1 mt-1 px-4 py-2.5 rounded-lg bg-slate-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition"
+          >
+            <span class="text-lg leading-none">＋</span>
+            Add Hotel
+          </button>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
+        <!-- Handler -->
         <div>
-          <label class="font-medium text-slate-700">
-            Handler <span class="text-red-500">*</span>
-          </label>
+          <label class="font-medium text-slate-700"> Handler </label>
           <input
             v-model="dealForm.handler"
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
@@ -1203,7 +1696,8 @@ const downloadPdf = () => {
           />
         </div>
 
-        <div>
+        <!-- Link Drive -->
+        <!-- <div>
           <label class="font-medium text-slate-700">
             Link Drive <span class="text-red-500">*</span>
           </label>
@@ -1212,12 +1706,11 @@ const downloadPdf = () => {
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
             placeholder="Link Drive"
           />
-        </div>
+        </div> -->
 
+        <!-- Total Pax -->
         <div>
-          <label class="font-medium text-slate-700">
-            Total Pax <span class="text-red-500">*</span>
-          </label>
+          <label class="font-medium text-slate-700"> Total Pax </label>
           <input
             v-model="dealForm.total_pax"
             type="text"
@@ -1226,10 +1719,9 @@ const downloadPdf = () => {
           />
         </div>
 
+        <!-- Activity -->
         <div>
-          <label class="font-medium text-slate-700">
-            Activity <span class="text-red-500">*</span>
-          </label>
+          <label class="font-medium text-slate-700"> Activity </label>
           <input
             v-model="dealForm.activity"
             type="text"
@@ -1238,102 +1730,155 @@ const downloadPdf = () => {
           />
         </div>
 
-        <!-- note_hotel -->
+        <!-- Note Hotel -->
         <div>
           <label class="font-medium text-slate-700">Note Hotel</label>
           <textarea
             v-model="dealForm.note_hotel"
-            type="text"
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
             placeholder="Note Hotel"
           ></textarea>
         </div>
 
-        <!-- note_resto -->
+        <!-- Note Resto -->
         <div>
           <label class="font-medium text-slate-700">Note Resto</label>
           <textarea
             v-model="dealForm.note_resto"
-            type="text"
             class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
             placeholder="Note Resto"
           ></textarea>
         </div>
 
-        <!-- payment_status -->
-        <div>
-          <label class="font-medium text-slate-700"
-            >Payment Status <span class="text-red-500">*</span></label
-          >
-          <select
-            v-model="dealForm.payment_status"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-          >
-            <option value="" disabled>Pilih Payment Status</option>
-            <option value="dp">DP</option>
-            <option value="lunas">Lunas</option>
-          </select>
-        </div>
+        <!-- Payment Status -->
+        <div class="relative w-full">
+          <label class="font-medium text-slate-700"> Payment Status </label>
 
-        <h4 class="font-semibold mb-2 text-slate-700">
-          File Customer (New Customer + Deal Customer)
-        </h4>
+          <!-- Dropdown button -->
+          <button
+            @click="toggleDropdown"
+            class="w-full flex justify-between items-center border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+          >
+            <span>{{ dealForm.payment_status || "Pilih Payment Status" }}</span>
+            <component
+              :is="dropdownOpen ? ChevronRight : ChevronDown"
+              class="w-5 h-5 transition-transform duration-200"
+            />
+          </button>
 
-        <!-- PREVIEW ALL FILES -->
-        <div class="flex flex-wrap gap-3 mt-2">
+          <!-- Dropdown options -->
           <div
-            v-for="file in allFiles"
-            :key="file.id"
-            class="p-2 border rounded bg-gray-100 flex items-center justify-between w-60"
+            v-if="dropdownOpen"
+            class="absolute z-10 mt-1 w-full bg-white border-[1.5px] border-slate-200 rounded-lg shadow-lg"
           >
-            <a
-              :href="file.preview_url"
-              target="_blank"
-              class="truncate max-w-[120px]"
-            >
-              {{ file.original_name }}
-            </a>
-
-            <button
-              v-if="file.source === 'deal_customer'"
-              @click="removeDealFile(file)"
-              class="text-red-500 font-bold"
-            >
-              x
-            </button>
+            <ul>
+              <li
+                v-for="option in options"
+                :key="option.value"
+                @click="selectOption(option.value)"
+                class="p-3 cursor-pointer hover:bg-slate-100"
+              >
+                {{ option.label }}
+              </li>
+            </ul>
           </div>
-        </div>
 
-        <!-- UPLOAD FILE DEAL CUSTOMER -->
-        <div class="mt-4">
-          <label class="font-medium text-slate-700 mb-1 block">
-            Upload File Deal Customer
-          </label>
-
-          <input
-            type="file"
-            multiple
-            @change="handleDealFileChange"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-2 mt-1"
-          />
-        </div>
-
-        <!-- SELECTED FILES (belum upload) -->
-        <div class="flex flex-wrap gap-2 mt-3" v-if="dealSelectedFiles.length">
-          <div
-            v-for="(file, index) in dealSelectedFiles"
-            :key="index"
-            class="p-2 border rounded bg-slate-100 flex items-center justify-between"
+          <!-- Modal -->
+          <transition
+            enter-active-class="transition ease-out duration-300"
+            enter-from-class="opacity-0 scale-50"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition ease-in duration-200"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-50"
           >
-            <span class="truncate max-w-[150px]">{{ file.name }}</span>
-
-            <button
-              type="button"
-              @click="removeDealSelectedFile(index)"
-              class="text-red-500 ml-2"
+            <div
+              v-if="showModal"
+              class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-20"
             >
-              x
-            </button>
+              <div class="bg-white rounded-lg p-6 w-96">
+                <h2 class="text-lg font-semibold mb-4">Modal Payment Status</h2>
+                <p class="mb-4">
+                  Anda memilih: <strong>{{ dealForm.payment_status }}</strong>
+                </p>
+
+                <!-- Tombol ke kanan -->
+                <div class="flex justify-end">
+                  <button
+                    @click="showModal = false"
+                    class="px-4 py-2 bg-slate-800 text-white rounded-lg"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+        </div>
+
+        <!-- File Customer -->
+        <div class="col-span-2">
+          <h4 class="font-semibold mb-2 text-slate-700">
+            Preview File New Customer & Deal Customer
+          </h4>
+
+          <!-- Preview Files -->
+          <div class="flex flex-wrap gap-4 mt-3">
+            <div
+              v-for="file in previewFiles"
+              :key="file.id"
+              class="relative w-60 flex items-center justify-between gap-2 p-2 border border-slate-300 rounded-md bg-slate-100"
+            >
+              <a
+                :href="file.preview_url"
+                target="_blank"
+                class="truncate text-sm font-medium text-slate-700 hover:text-blue-600"
+              >
+                {{ file.original_name }}
+              </a>
+
+              <button
+                v-if="file.source === 'deal_customer' && file.real_id"
+                @click="removeDealFile(file)"
+                class="text-red-500 ml-2"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <!-- Upload File Deal Customer -->
+          <div class="mt-4">
+            <label class="font-medium text-slate-700 mb-1 block">
+              Upload File Deal Customer
+            </label>
+            <input
+              type="file"
+              multiple
+              @change="handleDealFileChange"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1"
+            />
+          </div>
+
+          <!-- Selected Files (belum upload) -->
+          <div
+            class="flex flex-wrap gap-2 mt-3"
+            v-if="dealSelectedFiles.length"
+          >
+            <div
+              v-for="(file, index) in dealSelectedFiles"
+              :key="index"
+              class="flex items-center justify-between gap-2 p-2 border border-slate-300 rounded-md bg-slate-100"
+            >
+              <span class="truncate max-w-[150px]">{{ file.name }}</span>
+              <button
+                type="button"
+                @click="removeDealSelectedFile(index)"
+                class="text-red-500 ml-2"
+              >
+                ×
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1352,7 +1897,6 @@ const downloadPdf = () => {
               <h4 class="font-semibold text-slate-700">
                 Transport #{{ index + 1 }}
               </h4>
-
               <button
                 v-if="dealForm.transport.length > 1"
                 @click="removeTransport(index)"
@@ -1362,32 +1906,40 @@ const downloadPdf = () => {
               </button>
             </div>
 
-            <!-- GRID INPUT -->
+            <!-- GRID INPUT TRANSPORT -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
               <div>
                 <label class="font-medium text-slate-700">Guide</label>
-                <input v-model="tr.guide" class="input" placeholder="Guide" />
+                <input
+                  v-model="tr.guide"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  placeholder="Guide"
+                />
               </div>
 
               <div>
                 <label class="font-medium text-slate-700">HP Guide</label>
                 <input
                   v-model="tr.hp_guide"
-                  class="input"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                   placeholder="HP Guide"
                 />
               </div>
 
               <div>
                 <label class="font-medium text-slate-700">Driver</label>
-                <input v-model="tr.driver" class="input" placeholder="Driver" />
+                <input
+                  v-model="tr.driver"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  placeholder="Driver"
+                />
               </div>
 
               <div>
                 <label class="font-medium text-slate-700">HP Driver</label>
                 <input
                   v-model="tr.hp_driver"
-                  class="input"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                   placeholder="HP Driver"
                 />
               </div>
@@ -1396,7 +1948,7 @@ const downloadPdf = () => {
                 <label class="font-medium text-slate-700">Note Operation</label>
                 <textarea
                   v-model="tr.note_operation"
-                  class="input"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                   placeholder="Note Operation"
                 ></textarea>
               </div>
@@ -1405,13 +1957,12 @@ const downloadPdf = () => {
                 <label class="font-medium text-slate-700">Report</label>
                 <textarea
                   v-model="tr.report"
-                  class="input"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                   placeholder="Report"
                 ></textarea>
               </div>
 
-              <!-- FILE UPLOAD -->
-              <!-- FILE UPLOAD -->
+              <!-- Upload Foto Transport -->
               <div class="col-span-2">
                 <label class="font-medium text-slate-700"
                   >Upload Foto Transport</label
@@ -1420,28 +1971,54 @@ const downloadPdf = () => {
                   type="file"
                   multiple
                   @change="handleTransportFiles($event, index)"
-                  class="w-full border border-slate-300 rounded-lg p-2 mt-2 bg-white"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                 />
 
-                <!-- PREVIEW FILE GRID -->
+                <!-- Preview Files -->
+                <!-- PREVIEW FILE TRANSPORT -->
                 <div
                   class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3"
-                  v-if="tr.foto.length"
                 >
+                  <!-- FILE EXISTING (dari backend) -->
                   <div
-                    v-for="(file, fIndex) in tr.foto"
-                    :key="fIndex"
-                    class="relative p-2 bg-slate-100 rounded border flex flex-col items-center justify-center"
+                    v-for="(file, fIndex) in tr.foto_existing"
+                    :key="'old-' + fIndex"
+                    class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
+                    @click="openPreviewExisting(file)"
                   >
-                    <span class="text-sm truncate max-w-full">{{
-                      file.name
-                    }}</span>
+                    <!-- Tampilkan hanya nama file -->
+                    <span class="text-sm truncate block text-center">
+                      {{ file.original_name || file.file_name }}
+                    </span>
 
-                    <!-- tombol hapus -->
+                    <!-- Tombol hapus -->
                     <button
                       type="button"
-                      @click="removeTransportFile(index, fIndex)"
-                      class="absolute top-1 right-1 text-red-600 hover:text-red-800 font-bold"
+                      @click.stop="
+                        removeExistingTransportFile(index, fIndex, file)
+                      "
+                      class="absolute top-1 right-1 text-red-500 bg-white rounded-full px-2"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <!-- FILE BARU (belum disimpan) -->
+                  <div
+                    v-for="(file, fIndex) in tr.foto"
+                    :key="'new-' + fIndex"
+                    class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
+                    @click="openPreviewNew(file)"
+                  >
+                    <!-- Tampilkan hanya nama file asli -->
+                    <span class="text-sm truncate block text-center">
+                      {{ file.name }}
+                    </span>
+
+                    <button
+                      type="button"
+                      @click.stop="removeTransportFile(index, fIndex)"
+                      class="absolute top-1 right-1 text-red-500 bg-white rounded-full px-2"
                     >
                       ×
                     </button>
@@ -1451,10 +2028,10 @@ const downloadPdf = () => {
             </div>
           </div>
 
-          <!-- BUTTON ADD TRANSPORT -->
+          <!-- Button Add Transport -->
           <button
             @click="addTransport"
-            class="px-4 py-2 bg-green-600 text-white rounded-lg mb-6"
+            class="px-4 py-2 bg-slate-800 text-white rounded-lg mb-6"
           >
             + Tambah Transport
           </button>
@@ -1467,7 +2044,7 @@ const downloadPdf = () => {
         <button
           @click="handleSave"
           :disabled="isLoading"
-          class="px-4 py-2 bg-blue-900 text-white rounded-lg flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          class="px-4 py-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <svg
             v-if="isLoading"
@@ -1490,21 +2067,21 @@ const downloadPdf = () => {
               d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
             ></path>
           </svg>
-          {{ isLoading ? "Memproses..." : isEditing ? "Update" : "Save" }}
+          {{ isLoading ? "Memproses..." : isEditing ? "Update" : "Simpan" }}
         </button>
         <button
           v-if="isEditing"
           @click="cancelEdit"
-          class="px-4 py-2 bg-gray-500 text-white rounded-lg"
+          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg"
         >
-          Batal Edit
+          Cancel Edit
         </button>
       </div>
     </div>
 
     <!--Filter Bar -->
     <div
-      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl border border-slate-200"
     >
       <!-- Search -->
       <div class="relative">
@@ -1514,7 +2091,7 @@ const downloadPdf = () => {
           @focus="closeAllDropdowns()"
           type="text"
           placeholder="Search"
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -1525,7 +2102,7 @@ const downloadPdf = () => {
           v-model="filterDate"
           @focus="closeAllDropdowns()"
           type="date"
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -1533,7 +2110,7 @@ const downloadPdf = () => {
       <div class="relative" id="progress-dropdown">
         <button
           @click.stop="openOnlyProgress()"
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -1572,7 +2149,7 @@ const downloadPdf = () => {
       <div class="relative" id="segmen-dropdown">
         <button
           @click.stop="openOnlySegmen()"
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -1610,13 +2187,14 @@ const downloadPdf = () => {
       <div class="lg:col-span-5 flex gap-2 justify-end">
         <button
           @click="downloadPdf"
-          class="bg-blue-600 text-white px-4 py-2 rounded"
+          class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
+          <Download class="w-4 h-4" />
           Download PDF
         </button>
         <button
           @click="resetFilters"
-          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow"
+          class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
           <RotateCcw class="w-4 h-4" />
           Reset
@@ -1625,51 +2203,181 @@ const downloadPdf = () => {
     </div>
 
     <!-- Table -->
-    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
-      <table
-        class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
-      >
-        <thead class="bg-blue-900 text-white">
+    <div
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+    >
+      <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
+        <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
           <tr>
-            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
-            <th class="px-4 py-3 text-left">No</th>
-            <th class="px-4 py-3 text-left w-[12%]">File</th>
-            <th class="px-4 py-3 text-left w-[10%]">Date</th>
-            <th class="px-4 py-3 text-left w-[10%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[12%]">Guest Name</th>
-            <th class="px-4 py-3 text-left w-[10%]">Progress</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check In</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
-            <th class="px-4 py-3 text-left w-[8%]">PIC</th>
-            <th class="px-4 py-3 text-left w-[10%]">via</th>
-            <th class="px-4 py-3 text-left w-[10%]">Social Media</th>
-            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
-            <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
-            <th class="px-4 py-3 text-left w-[10%]">Activity</th>
-            <th class="px-4 py-3 text-left w-[8%]">Pax</th>
-            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
-            <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
-            <th class="px-4 py-3 text-left w-[10%]">Hotel</th>
-            <th class="px-4 py-3 text-left w-[10%]">Note Hotel</th>
-            <th class="px-4 py-3 text-left w-[10%]">Note Resto</th>
-            <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
-            <th class="px-4 py-2">Guide</th>
-            <th class="px-4 py-2">HP Guide</th>
-            <th class="px-4 py-2">Driver</th>
-            <th class="px-4 py-2">HP Driver</th>
-            <th class="px-4 py-2">Note Operation</th>
-            <th class="px-4 py-2">Report</th>
-            <!-- <th class="px-4 py-2">Foto</th> -->
-            <th class="px-4 py-3 text-left w-[10%]">Notes</th>
-            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
+            <th
+              class="px-4 py-3 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Actions
+            </th>
+            <th
+              class="px-4 py-2 w-[3%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              No
+            </th>
+            <th
+              class="px-4 py-2 w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              File
+            </th>
+            <th
+              class="px-4 py-2 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Date
+            </th>
+            <th
+              class="px-4 py-2 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Phone
+            </th>
+            <th
+              class="px-4 py-2 w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Email
+            </th>
+            <th
+              class="px-4 py-2 w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Guest Name
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check In
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check Out
+            </th>
+            <th
+              class="px-4 py-2 w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Tour Packages
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Country
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Progress
+            </th>
+
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              PIC
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              via
+            </th>
+            <th
+              class="px-4 py-2 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Social Media
+            </th>
+
+            <!-- <th
+              class="px-4 py-2 w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Link Drive
+            </th> -->
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Activity
+            </th>
+            <th
+              class="px-4 py-2 w-[4%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Pax
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Segmen
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Handler
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Hotel
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Hotel
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Resto
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Payment Status
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Guide
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              HP Guide
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Driver
+            </th>
+            <th
+              class="px-4 py-2 w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              HP Driver
+            </th>
+            <th
+              class="px-4 py-2 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Operation
+            </th>
+            <th
+              class="px-4 py-2 w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Report
+            </th>
+            <th
+              class="px-4 py-2 w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Notes
+            </th>
+            <th
+              class="px-4 py-2 w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Actions
+            </th>
           </tr>
         </thead>
 
         <tbody>
           <!-- Loading -->
           <tr v-if="loading">
-            <td colspan="21" class="p-4">
+            <td colspan="31" class="p-4">
               <div class="space-y-2">
                 <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
                 <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
@@ -1681,189 +2389,300 @@ const downloadPdf = () => {
           <!-- Tidak ada data -->
           <tr v-else-if="!loading && paginatedDataCustomers.length === 0">
             <td
-              colspan="21"
+              colspan="31"
               class="text-center p-4 text-gray-800 font-semibold"
             >
               Data not found
             </td>
           </tr>
 
-          <!-- LIST DATA -->
+          <!-- List Data -->
           <tr
             v-else
             v-for="(d, i) in paginatedDataCustomers"
             :key="d.deal_customer?.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
-            <td class="px-4 py-3 whitespace-nowrap">
+            <!-- Actions -->
+            <td class="px-4 py-2 whitespace-nowrap">
               <div class="flex items-center gap-2">
                 <button
-                  @click="openCancelModal(d)"
-                  class="px-2 py-1 bg-red-500 text-white rounded"
-                >
-                  Cancel
-                </button>
-
-                <button
                   @click="editDeal(d)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Pencil class="w-4 h-4 text-orange-500" />
                 </button>
-
+                <button
+                  @click="openCancelModal(d)"
+                  class="px-2 py-1 text-red-600 font-medium"
+                >
+                  Cancel
+                </button>
                 <button
                   @click="openDeleteModal(d)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
                 </button>
               </div>
             </td>
-            <td class="px-4 py-2">{{ i + 1 }}</td>
-            <td>
+
+            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
+            <td class="px-4 py-2 whitespace-nowrap">
               <button
                 @click="openFilePreview(d.deal_customer?.id)"
-                class="text-cyan-700 underline"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 transition"
               >
-                Lihat Semua File
+                View
               </button>
             </td>
 
-            <!-- NEW CUSTOMER -->
-            <td class="px-4 py-3">{{ d.new_customer?.date }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.phone }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.name }}</td>
+            <!-- New Customer -->
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.date ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.phone ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.email ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.name ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.check_in ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.check_out ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.tour_packages ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.country ?? "-" }}
+            </td>
 
-            <!-- Badge Progress -->
-            <td class="px-4 py-3">
+            <!-- Progress -->
+            <td class="px-4 py-2 whitespace-nowrap">
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-28',
                   progressColor(d.new_customer?.progress),
                 ]"
               >
-                {{ d.new_customer?.progress }}
+                {{ d.new_customer?.progress ?? "-" }}
               </span>
             </td>
-            <td class="px-4 py-3">{{ d.new_customer?.check_in }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.check_out }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.pic }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.via }}</td>
-            <td class="px-4 py-3">
+
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.pic ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.via ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
               <a
-                :href="d.new_customer?.social_media_id"
+                v-if="d.new_customer?.social_media_id"
+                :href="instagramUrl(d.new_customer.social_media_id)"
                 target="_blank"
-                class="text-blue-600 underline hover:text-blue-800"
+                rel="noopener"
+                class="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800"
               >
-                {{ d.new_customer?.social_media_id }}
+                {{ d.new_customer.social_media_id ?? "-" }}
               </a>
-            </td>
-            <td class="px-4 py-3">{{ d.new_customer?.tour_packages }}</td>
-            <td>{{ d.deal_customer?.link_drive ?? "-" }}</td>
-            <td>{{ d.deal_customer?.activity ?? "-" }}</td>
-            <td>{{ d.deal_customer?.total_pax ?? "-" }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.segmen }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.country }}</td>
-            <td>{{ d.deal_customer?.handler ?? "-" }}</td>
-            <td class="px-4 py-3">{{ d.new_customer?.hotel }}</td>
-            <td>{{ d.deal_customer?.note_hotel ?? "-" }}</td>
-            <td>{{ d.deal_customer?.note_resto ?? "-" }}</td>
-            <td>
-              <span v-if="d.deal_customer?.payment_status">
-                {{ d.deal_customer.payment_status === "dp" ? "DP" : "Lunas" }}
-              </span>
+
               <span v-else>-</span>
             </td>
-            <!-- Guide -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.guide ?? "-" }}
-              </div>
-            </td>
-            <!-- HP Guide -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.hp_guide ?? "-" }}
-              </div>
-            </td>
-            <!-- Driver -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.driver ?? "-" }}
-              </div>
-            </td>
-            <!-- HP Driver -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.hp_driver ?? "-" }}
-              </div>
-            </td>
-            <!-- Note Operation -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.note_operation ?? "-" }}
-              </div>
-            </td>
-            <!-- Report -->
-            <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-              >
-                {{ tr.report ?? "-" }}
-              </div>
-            </td>
-            <!-- Foto -->
-            <!-- <td class="px-4 py-3">
-              <div
-                v-for="(tr, j) in d.deal_customer?.transports || []"
-                :key="tr.id || j"
-                class="mb-1"
-              >
-                <span
-                  v-for="foto in tr.foto"
-                  :key="foto.file_name"
-                  class="block"
-                >
-                  <a
-                    :href="`http://127.0.0.1:8000/storage/${foto.path}`"
-                    target="_blank"
-                    class="text-blue-600 underline text-sm"
-                  >
-                    {{ foto.original }}
-                  </a>
-                </span>
-              </div>
+
+            <!-- <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.link_drive ?? "-" }}
             </td> -->
-            <td class="px-4 py-3">{{ d.new_customer?.notes }}</td>
-            <!-- ACTION BUTTONS -->
-            <td class="px-4 py-3 whitespace-nowrap">
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.activity ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.total_pax ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.segmen ?? "-" }}
+            </td>
+
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.handler ?? "-" }}
+            </td>
+            <!-- <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.hotel }}
+            </td> -->
+            <td class="px-4 py-2 text-left not-[]:whitespace-nowrap">
+              <button
+                @click="openHotelModal(d.new_customer?.hotel)"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 transition"
+              >
+                View
+              </button>
+            </td>
+            <!-- Hotel Modal -->
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 scale-95"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div
+                v-if="showHotelModal"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                @click.self="closeHotelModal"
+              >
+                <div
+                  class="bg-white w-full max-w-xl rounded-xl shadow-md overflow-hidden"
+                >
+                  <!-- Header -->
+                  <div
+                    class="px-5 py-4 flex items-center justify-between border-slate-200"
+                  >
+                    <h3
+                      class="flex items-center gap-2 mb-3 text-lg font-semibold text-slate-800"
+                    >
+                      Hotel List
+                      <span class="ml-2 text-sm text-gray-500"
+                        >({{ currentHotel.length ?? "-" }})</span
+                      >
+                    </h3>
+
+                    <button
+                      @click="closeHotelModal"
+                      class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-200 text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <!-- Content -->
+                  <div class="p-6">
+                    <ul
+                      v-if="currentHotel.length"
+                      class="flex flex-col gap-3 max-h-80 overflow-y-auto hide-scrollbar"
+                    >
+                      <div
+                        v-for="(hotel, index) in currentHotel"
+                        :key="index"
+                        class="rounded-lg border border-slate-200 px-4 py-3 bg-slate-50 hover:bg-white hover:shadow-sm transition"
+                      >
+                        {{ hotel.trim() }}
+                      </div>
+                    </ul>
+
+                    <p v-else class="text-sm text-center text-slate-500 py-8">
+                      No hotel data
+                    </p>
+                  </div>
+
+                  <!-- Footer -->
+                  <div class="px-5 py-4 flex justify-end border-slate-200">
+                    <button
+                      @click="closeHotelModal"
+                      class="px-4 py-2 text-sm rounded-lg bg-slate-800 text-white hover:bg-slate-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.note_hotel ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.deal_customer?.note_resto ?? "-" }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              <span
+                v-if="d.deal_customer?.payment_status"
+                :class="[
+                  'inline-flex items-center justify-center',
+                  'w-20 px-2 py-1',
+                  'rounded-full text-xs font-semibold text-center',
+                  d.deal_customer.payment_status === 'dp'
+                    ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                    : 'bg-green-100 text-green-700 border border-green-200',
+                ]"
+              >
+                {{ d.deal_customer.payment_status === "dp" ? "DP" : "Lunas" }}
+              </span>
+
+              <span v-else>-</span>
+            </td>
+
+            <!-- Guide / HP Guide / Driver / HP Driver -->
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.guide ?? "-")
+                  .join(", ")
+              }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.hp_guide ?? "-")
+                  .join(", ")
+              }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.driver ?? "-")
+                  .join(", ")
+              }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.hp_driver ?? "-")
+                  .join(", ")
+              }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.note_operation ?? "-")
+                  .join(", ")
+              }}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{
+                d.deal_customer?.transports
+                  ?.map((t) => t.report ?? "-")
+                  .join(", ")
+              }}
+            </td>
+
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ d.new_customer?.notes ?? "-" }}
+            </td>
+
+            <!-- Actions -->
+            <td class="px-4 py-2 whitespace-nowrap">
               <div class="flex items-center gap-2">
                 <button
                   @click="editDeal(d)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Pencil class="w-4 h-4 text-orange-500" />
                 </button>
-
+                <button
+                  @click="openCancelModal(d)"
+                  class="px-2 py-1 text-red-600 font-medium"
+                >
+                  Cancel
+                </button>
                 <button
                   @click="openDeleteModal(d)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
                 </button>
@@ -1875,106 +2694,196 @@ const downloadPdf = () => {
     </div>
 
     <!-- Cancel Modal -->
-    <div
-      v-if="isCancelModalOpen"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center"
+    <transition
+      enter-active-class="transition ease-out duration-300"
+      enter-from-class="opacity-0 scale-95"
+      enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100 scale-100"
+      leave-to-class="opacity-0 scale-95"
     >
-      <div class="bg-white p-5 rounded shadow-lg w-80">
-        <h2 class="font-semibold text-lg mb-3">Batalkan Deal?</h2>
+      <div
+        v-if="isCancelModalOpen"
+        class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      >
+        <div class="bg-white w-80 rounded-xl shadow-md p-6">
+          <!-- Title -->
+          <h2 class="text-lg font-semibold text-slate-800 mb-2">
+            Batalkan Deal?
+          </h2>
 
-        <p class="text-sm mb-4">
-          Apakah Anda yakin ingin membatalkan deal ini? Status di New Customer
-          akan berubah menjadi <b>CANCEL</b>.
-        </p>
+          <!-- Description -->
+          <p class="text-sm text-slate-600 leading-relaxed mb-6">
+            Apakah Anda yakin ingin membatalkan deal ini? Status di
+            <span class="font-medium">New Customer</span> akan berubah menjadi
+            <span class="font-semibold text-red-600">CANCEL</span>.
+          </p>
 
-        <div class="flex justify-end gap-2">
-          <button
-            class="px-3 py-1 bg-slate-300 rounded"
-            @click="isCancelModalOpen = false"
-          >
-            Batal
-          </button>
-
-          <button
-            class="px-3 py-1 bg-red-500 text-white rounded"
-            @click="cancelDeal"
-          >
-            Ya, Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!--  MODAL FILE DOWLOAD -->
-    <div
-      v-if="showFileModal"
-      class="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
-    >
-      <div class="bg-white rounded-lg w-[90%] max-w-3xl p-6 relative">
-        <!-- Close button -->
-        <button
-          @click="closeFileModal"
-          class="absolute right-3 top-3 text-slate-600 hover:text-black"
-        >
-          ✖
-        </button>
-
-        <h2 class="text-xl font-semibold mb-4">Semua File</h2>
-
-        <!-- GRID -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          <div
-            v-for="file in modalFiles"
-            :key="file.id"
-            class="border rounded-lg p-2 shadow-sm bg-slate-50"
-          >
-            <!-- Preview jika gambar -->
-            <!-- <img
-              v-if="
-                file.original_name.endsWith('.jpg') ||
-                file.original_name.endsWith('.jpeg') ||
-                file.original_name.endsWith('.png')
-              "
-              :src="file.preview_url"
-              class="h-32 w-full object-cover rounded"
-            /> -->
-            <img
-              v-if="
-                typeof file.original_name === 'string' &&
-                (file.original_name.toLowerCase().endsWith('.jpg') ||
-                  file.original_name.toLowerCase().endsWith('.jpeg') ||
-                  file.original_name.toLowerCase().endsWith('.png'))
-              "
-              :src="
-                file.preview_url.startsWith('http')
-                  ? file.preview_url
-                  : API_BASE + file.preview_url
-              "
-              class="h-32 w-full object-cover rounded"
-            />
-
-            <!-- PDF Preview -->
-            <div
-              v-else-if="file.original_name.endsWith('.pdf')"
-              class="h-32 flex items-center justify-center bg-red-200 rounded-lg"
-            >
-              <span class="text-red-800 font-semibold">PDF</span>
-            </div>
-
-            <!-- Nama file -->
-            <p class="text-xs mt-2 truncate">{{ file.original_name }}</p>
-
-            <!-- Tombol Download -->
+          <!-- Actions -->
+          <!-- Actions -->
+          <div class="flex justify-end gap-3">
             <button
-              @click="downloadFile(file)"
-              class="mt-2 text-blue-600 text-xs underline"
+              class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
+              @click="isCancelModalOpen = false"
             >
-              Download
+              Batal
+            </button>
+
+            <button
+              class="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center justify-center gap-2"
+              :disabled="isLoadingModalCancel"
+              @click="cancelDeal"
+            >
+              <svg
+                v-if="isLoadingModalCancel"
+                class="animate-spin h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                ></path>
+              </svg>
+              <span>{{
+                isLoadingModalCancel ? "Memproses..." : "Ya, Batalkan"
+              }}</span>
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </transition>
+
+    <!--  MODAL FILE DOWLOAD -->
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0 scale-95"
+      enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100 scale-100"
+      leave-to-class="opacity-0 scale-95"
+    >
+      <div
+        v-if="showFileModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md"
+        @click.self="closeFileModal"
+      >
+        <div
+          class="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-md overflow-hidden"
+        >
+          <!-- HEADER -->
+          <div class="px-8 py-6 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">
+              All Files
+              <span class="ml-2 text-sm text-slate-400">
+                ({{ modalFiles.length }})
+              </span>
+            </h2>
+
+            <button
+              @click="closeFileModal"
+              class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            >
+              ✕
+            </button>
+          </div>
+          <!-- CONTENT -->
+          <div
+            class="px-8 pb-8 max-h-[calc(90vh-96px)] overflow-y-auto hidden-scroll"
+          >
+            <!-- EMPTY STATE -->
+            <div
+              v-if="modalFiles.length === 0"
+              class="flex flex-col items-center justify-center py-24 text-slate-400"
+            >
+              <div class="text-6xl mb-4">📂</div>
+              <p class="text-sm">Tidak ada file yang tersedia</p>
+            </div>
+
+            <!-- FILE GRID -->
+            <div
+              v-else
+              class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+            >
+              <div
+                v-for="file in modalFiles"
+                :key="file.id"
+                class="bg-slate-50 rounded-2xl p-4 hover:bg-white hover:shadow-md transition flex flex-col"
+              >
+                <!-- PREVIEW -->
+                <div
+                  class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center"
+                >
+                  <!-- IMAGE -->
+                  <img
+                    v-if="
+                      typeof file.original_name === 'string' &&
+                      (file.original_name.toLowerCase().endsWith('.jpg') ||
+                        file.original_name.toLowerCase().endsWith('.jpeg') ||
+                        file.original_name.toLowerCase().endsWith('.png'))
+                    "
+                    :src="
+                      file.preview_url.startsWith('http')
+                        ? file.preview_url
+                        : API_BASE + file.preview_url
+                    "
+                    class="w-full h-full object-cover"
+                  />
+
+                  <!-- PDF -->
+                  <iframe
+                    v-else-if="
+                      file.original_name.toLowerCase().endsWith('.pdf')
+                    "
+                    :src="
+                      file.preview_url.startsWith('http')
+                        ? file.preview_url
+                        : API_BASE + file.preview_url
+                    "
+                    class="w-full h-full"
+                  ></iframe>
+
+                  <!-- OTHER -->
+                  <div
+                    v-else
+                    class="flex flex-col items-center text-slate-400 px-2"
+                  >
+                    <div class="text-4xl">📄</div>
+                    <p class="text-xs mt-2 text-center break-all">
+                      {{ file.original_name }}
+                    </p>
+                  </div>
+                </div>
+
+                <!-- FILE NAME -->
+                <p class="mt-3 text-xs text-slate-600 truncate">
+                  {{ file.original_name }}
+                </p>
+
+                <!-- ACTION -->
+                <button
+                  @click="downloadFile(file)"
+                  class="mt-4 inline-flex items-center justify-center gap-2 text-sm font-medium bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white py-2.5 rounded-lg transition"
+                >
+                  <Download class="w-4 h-4" />
+                  Download
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Modal delete -->
     <ConfirmModal

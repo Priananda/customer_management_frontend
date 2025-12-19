@@ -2,7 +2,7 @@ import { useRouter } from "vue-router";
 
 export function useLogout() {
   const router = useRouter();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = JSON.parse(sessionStorage.getItem("user") || "{}");
   const role = user.role;
 
   const logout = () => {
@@ -16,7 +16,7 @@ export function useLogout() {
     }
 
     // Hapus session / localStorage
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
 
     // Redirect sesuai role
     switch (role) {
@@ -31,7 +31,7 @@ export function useLogout() {
         router.push("/login-super-admin");
         break;
       default:
-        router.push("/login-pic-staff"); // fallback
+        router.push("/login-admin"); // fallback
     }
   };
 

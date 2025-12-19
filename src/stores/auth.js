@@ -42,7 +42,7 @@ export const useAuthStore = defineStore("auth", {
       // Delete header Authorization
       delete api.defaults.headers.common["Authorization"];
 
-      router.push("/login-pic-staff");
+      router.push("/login-admin");
     },
 
     async refreshAccessToken() {

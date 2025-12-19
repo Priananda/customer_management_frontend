@@ -8,15 +8,30 @@ import {
   Pencil,
   Trash2,
   RotateCcw,
+  Download,
 } from "lucide-vue-next";
 import FilePreviewModal from "../components/FilePreviewModal.vue";
 import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  watchEffect,
+} from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth.js";
 
 const authStore = useAuthStore();
+const picName = computed(() => authStore.user?.name || "");
+
+// DEBUG
+watchEffect(() => {
+  console.log("authStore.user =", authStore.user);
+  console.log("PIC name =", picName.value);
+});
 
 // Set token di axios
 if (authStore.accessToken) {
@@ -60,6 +75,7 @@ const editId = ref(null);
 const form = ref({
   date: "",
   phone: "",
+  email: "",
   name: "",
   progress: "",
   pic: "",
@@ -83,6 +99,7 @@ const showSegmenDropdown = ref(false);
 const loading = ref(false);
 
 // Modal delete
+const isDeleting = ref(false);
 const showDeleteModal = ref(false);
 const selectedId = ref(null);
 
@@ -94,6 +111,7 @@ const getNewCustomers = async () => {
       id: c.id,
       date: c.date ?? "",
       phone: c.phone ?? "",
+      email: c.email ?? "",
       name: c.name ?? "",
       progress: c.progress ?? "",
       pic: c.pic ?? "",
@@ -177,13 +195,18 @@ const submitForm = async () => {
 
 const confirmDelete = async () => {
   try {
+    isDeleting.value = true;
     await api.delete(`/new-customer/${selectedId.value}`);
     await getNewCustomers();
     await getSummary();
+
+    showDeleteModal.value = false;
+    selectedId.value = null;
   } catch (error) {
     console.error(error);
+    alert("Gagal menghapus data");
   } finally {
-    showDeleteModal.value = false;
+    isDeleting.value = false;
   }
 };
 
@@ -194,6 +217,7 @@ const filteredCustomers = computed(() => {
     const matchesKeyword =
       (c.date || "").toLowerCase().includes(keyword) ||
       (c.phone || "").toLowerCase().includes(keyword) ||
+      (c.email || "").toLowerCase().includes(keyword) ||
       (c.name || "").toLowerCase().includes(keyword) ||
       (c.progress || "").toLowerCase().includes(keyword) ||
       (c.pic || "").toLowerCase().includes(keyword) ||
@@ -404,7 +428,6 @@ const removeHotel = (index) => {
 
 const showHotelModal = ref(false);
 const selectedHotels = ref([]);
-
 const openHotelModal = (hotelStr) => {
   if (hotelStr.includes(",")) {
     selectedHotels.value = hotelStr.split(","); // lebih dari 1 hotel
@@ -413,18 +436,92 @@ const openHotelModal = (hotelStr) => {
   }
   showHotelModal.value = true;
 };
+const closeHotelModal = () => {
+  showHotelModal.value = false;
+};
 
-const countryOptions = [
-  "Indonesia",
-  "Malaysia",
-  "Singapore",
-  "Thailand",
-  "Vietnam",
-  "Philippines",
-];
+const showCountryModal = ref(false);
+const newCountryInput = ref("");
+const newCountryCategory = ref("");
+const showCategoryDropdown = ref(false);
+
+const countryCategories = ref({
+  Asia: ["India", "China", "Japan", "Korea Selatan"],
+  ASEAN: [
+    "Indonesia",
+    "Malaysia",
+    "Singapore",
+    "Thailand",
+    "Vietnam",
+    "Philippines",
+  ],
+  Eropa: ["Germany", "France", "Italy", "Spain", "United Kingdom"],
+  Amerika: ["USA", "Canada", "Brazil", "Argentina"],
+  Australia: ["Australia", "New Zealand"],
+});
+
+// pilih country dari list
 const selectCountry = (country) => {
   form.value.country = country;
-  showCountryDropdown.value = false;
+  showCountryModal.value = false;
+};
+// hapus country dari list
+const deleteCountry = (category, country) => {
+  countryCategories.value[category] = countryCategories.value[category].filter(
+    (c) => c !== country
+  );
+
+  if (form.value.country === country) {
+    form.value.country = "";
+  }
+};
+const closeCountryModal = () => {
+  showCountryModal.value = false;
+};
+const selectCategory = (category) => {
+  newCountryCategory.value = category;
+  showCategoryDropdown.value = false;
+};
+
+// Alert reactive
+const alertMessage = ref("");
+const alertColor = ref("red");
+const showAlert = (message, color = "red") => {
+  alertMessage.value = message;
+  alertColor.value = color;
+  setTimeout(() => {
+    alertMessage.value = "";
+  }, 5000);
+};
+
+// Alert Tailwind
+const addNewCountryToCategory = () => {
+  const country = newCountryInput.value.trim();
+  const category = newCountryCategory.value;
+
+  if (!country && !category) {
+    showAlert("Isi nama negara & pilih kategori!", "red");
+    return;
+  }
+
+  if (!country) {
+    showAlert("Nama negara wajib diisi!", "red");
+    return;
+  }
+
+  if (!category) {
+    showAlert("Pilih kategori negara!", "red");
+    return;
+  }
+
+  if (!countryCategories.value[category].includes(country)) {
+    countryCategories.value[category].push(country);
+  }
+
+  form.value.country = country;
+  newCountryInput.value = "";
+  newCountryCategory.value = "";
+  showCountryModal.value = false;
 };
 
 // FITUR FITUR UPLOAD
@@ -474,6 +571,16 @@ const openFilePreview = async (customerId) => {
 const downloadPdfAll = () => {
   window.open("http://127.0.0.1:8000/customers/pdf-all", "_blank");
 };
+
+const instagramUrl = (val) => {
+  if (!val) return "#";
+
+  // jika sudah URL
+  if (val.startsWith("http")) return val;
+
+  // @username → instagram.com/username
+  return `https://www.instagram.com/${val.replace("@", "")}`;
+};
 </script>
 
 <template>
@@ -489,7 +596,7 @@ const downloadPdfAll = () => {
 
     <!-- Filter -->
     <div
-      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl border border-slate-200"
     >
       <!-- Search -->
       <div class="relative">
@@ -499,7 +606,7 @@ const downloadPdfAll = () => {
           @focus="closeAllDropdowns()"
           type="text"
           placeholder="Search..."
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -510,7 +617,7 @@ const downloadPdfAll = () => {
           v-model="filterDate"
           @focus="closeAllDropdowns()"
           type="date"
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -518,7 +625,7 @@ const downloadPdfAll = () => {
       <div class="relative" id="progress-dropdown">
         <button
           @click.stop="openOnlyProgress()"
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -532,7 +639,7 @@ const downloadPdfAll = () => {
         <transition name="dropdown">
           <div
             v-if="showProgressDropdown"
-            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -566,7 +673,7 @@ const downloadPdfAll = () => {
       <div class="relative" id="segmen-dropdown">
         <button
           @click.stop="openOnlySegmen()"
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -580,7 +687,7 @@ const downloadPdfAll = () => {
         <transition name="dropdown">
           <div
             v-if="showSegmenDropdown"
-            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
+            class="absolute z-20 mt-1 w-full hover:shadow-md transition bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -604,22 +711,26 @@ const downloadPdfAll = () => {
       <div class="flex items-center gap-2">
         <button
           @click="openCreateModal"
-          class="w-full bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 rounded-lg"
+          class="cursor-pointer w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 rounded-lg"
         >
           Add New Customer
         </button>
       </div>
 
-      <div class="lg:col-span-5 flex gap-2 justify-end mb-4">
+      <div class="lg:col-span-5 flex gap-3 justify-end mb-4">
+        <!-- DOWNLOAD PDF -->
         <button
           @click="downloadPdfAll"
-          class="bg-blue-900 hover:bg-blue-900 text-white font-medium py-2 px-4 rounded-lg"
+          class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
+          <Download class="w-4 h-4" />
           Download PDF
         </button>
+
+        <!-- RESET -->
         <button
           @click="resetFilters"
-          class="flex items-center justify-center gap-2 bg-blue-900 text-white font-semibold px-4 py-2 rounded-lg shadow"
+          class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
           <RotateCcw class="w-4 h-4" />
           Reset
@@ -628,30 +739,107 @@ const downloadPdfAll = () => {
     </div>
 
     <!-- TABLE -->
-    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
-      <table
-        class="min-w-full bg-white border border-slate-300 rounded-lg text-sm table-fixed"
-      >
-        <thead class="bg-blue-900 text-white">
+    <div
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+    >
+      <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
+        <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
           <tr>
-            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
-            <th class="px-4 py-3 text-left w-[12%]">File</th>
-            <th class="px-4 py-3 text-left">No</th>
-            <th class="px-4 py-3 text-left w-[10%]">Date</th>
-            <th class="px-4 py-3 text-left w-[12%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[14%]">Guest Name</th>
-            <th class="px-4 py-3 text-left w-[10%]">Progress</th>
-            <th class="px-4 py-3 text-left w-[10%]">PIC</th>
-            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
-            <th class="px-4 py-3 text-left w-[6%]">Via</th>
-            <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[8%]">Social Media</th>
-            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check In</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
-            <th class="px-4 py-3 text-left w-[8%]">Hotel</th>
-            <th class="px-4 py-3 text-left w-[12%]">Notes</th>
-            <th class="px-4 py-3 text-left w-[10%]">Actions</th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Actions
+            </th>
+            <th
+              class="px-4 py-3 text-left whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              No
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              File
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Date
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Phone
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[14%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Email
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[14%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Guest Name
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check In
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check Out
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Tour Packages
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Country
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Progress
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              PIC
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Segmen
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Via
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Social Media
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Hotel
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Notes
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Actions
+            </th>
           </tr>
         </thead>
 
@@ -688,7 +876,7 @@ const downloadPdfAll = () => {
                 <button
                   v-if="canEdit"
                   @click="openEditModal(c)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Pencil class="w-4 h-4 text-orange-500" />
                 </button>
@@ -697,106 +885,170 @@ const downloadPdfAll = () => {
                 <button
                   v-if="canEdit"
                   @click="openDeleteModal(c.id)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
                 </button>
               </div>
             </td>
+            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
             <td>
               <button
                 @click="openFilePreview(c.id)"
-                class="text-cyan-700 underline"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 transition"
               >
-                Lihat Semua File
+                View
               </button>
             </td>
-            <td class="px-4 py-2">{{ i + 1 }}</td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.date }}
+              {{ c.date || "-" }}
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.phone }}
+              {{ c.phone || "-" }}
             </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.name }}</td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.email || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.name || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.check_in || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.check_out || "-" }}
+            </td>
             <td class="px-4 py-3 align-middle text-left">
+              {{ c.tour_packages || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.country || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-28',
                   progressColor(c.progress),
                 ]"
-                >{{ c.progress }}</span
+                >{{ c.progress || "-" }}</span
               >
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.pic }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.segmen }}</td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.via }}
+              {{ c.pic || "-" }}
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.country }}
+              {{ c.segmen || "-" }}
+            </td>
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.via || "-" }}
             </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               <a
-                :href="c.social_media_id"
+                v-if="c.social_media_id"
+                :href="instagramUrl(c.social_media_id)"
                 target="_blank"
-                class="text-blue-600 underline hover:text-blue-800"
+                rel="noopener"
+                class="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800"
               >
-                {{ c.social_media_id }}
+                {{ c.social_media_id || "-" }}
               </a>
+
+              <span v-else>-</span>
             </td>
 
-            <td class="px-4 py-3 align-middle text-left">
-              {{ c.tour_packages }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.check_in }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.check_out }}
-            </td>
-            <td class="px-4 py-3 text-left">
+            <td class="px-4 py-3 text-left whitespace-nowrap">
               <button
                 @click="openHotelModal(c.hotel)"
-                class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 transition"
               >
                 View
               </button>
             </td>
 
             <!-- Modal -->
-            <div
-              v-if="showHotelModal"
-              class="fixed inset-0 flex items-center justify-center z-50 bg-black/50"
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 scale-95"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
             >
-              <div class="bg-white rounded-lg shadow-lg w-80 p-4 relative">
-                <button
-                  @click="showHotelModal = false"
-                  class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+              <div
+                v-if="showHotelModal"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                @click.self="closeHotelModal"
+              >
+                <!-- Modal Card -->
+                <div
+                  class="bg-white w-full max-w-xl rounded-xl shadow-md overflow-hidden"
                 >
-                  ✕
-                </button>
-                <h3 class="text-lg font-bold mb-3">Hotels</h3>
-                <ul
-                  class="list-disc list-inside space-y-1 max-h-60 overflow-y-auto"
-                >
-                  <li v-for="(h, index) in selectedHotels" :key="index">
-                    {{ h.trim() }}
-                  </li>
-                </ul>
-              </div>
-            </div>
+                  <!-- Header -->
+                  <div class="px-6 py-4 flex items-center justify-between">
+                    <h3
+                      class="flex items-center gap-2 mb-3 text-lg font-semibold text-slate-800"
+                    >
+                      Hotel List
+                      <span class="ml-2 text-sm text-gray-500">
+                        ({{ selectedHotels.length }})
+                      </span>
+                    </h3>
 
-            <td class="px-4 py-3 align-middle text-left">{{ c.notes }}</td>
+                    <button
+                      @click="closeHotelModal"
+                      class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-200 text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <!-- Content -->
+                  <div class="p-6">
+                    <div
+                      v-if="selectedHotels.length"
+                      class="flex flex-col gap-3 max-h-80 overflow-y-auto hide-scrollbar"
+                    >
+                      <div
+                        v-for="(hotel, i) in selectedHotels"
+                        :key="i"
+                        class="rounded-lg border border-slate-200 px-4 py-3 bg-slate-50 hover:bg-white hover:shadow-sm transition"
+                      >
+                        <p
+                          class="text-sm font-medium text-slate-800 leading-snug"
+                        >
+                          {{ hotel }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p v-else class="text-sm text-center text-slate-500 py-8">
+                      No hotel data
+                    </p>
+                  </div>
+
+                  <!-- Footer -->
+                  <div class="px-6 py-4 flex justify-end">
+                    <button
+                      @click="closeHotelModal"
+                      class="px-4 py-2 text-sm rounded-lg bg-slate-800 text-white hover:bg-slate-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+              {{ c.notes || "-" }}
+            </td>
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               <div class="flex items-center gap-2">
                 <!-- Button Edit -->
                 <button
                   v-if="canEdit"
                   @click="openEditModal(c)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Pencil class="w-4 h-4 text-orange-500" />
                 </button>
@@ -805,7 +1057,7 @@ const downloadPdfAll = () => {
                 <button
                   v-if="canEdit"
                   @click="openDeleteModal(c.id)"
-                  class="bg-white border border-slate-200 hover:bg-slate-100 px-2 py-2 rounded-md shadow flex items-center justify-center"
+                  class="px-2 py-2 flex items-center justify-center"
                 >
                   <Trash2 class="w-4 h-4 text-red-600" />
                 </button>
@@ -825,11 +1077,12 @@ const downloadPdfAll = () => {
     <!-- Modal delete -->
     <ConfirmModal
       :show="showDeleteModal"
-      title="Hapus Data"
+      title="Delete Data"
       message="Apakah Anda yakin ingin menghapus data ini?"
       cancelText="Tidak"
       confirmText="Ya"
-      @cancel="showDeleteModal = false"
+      :loading="isDeleting"
+      @cancel="!isDeleting && (showDeleteModal = false)"
       @confirm="confirmDelete"
     />
 
@@ -889,7 +1142,6 @@ const downloadPdfAll = () => {
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Date
-                    <span class="text-red-500">*</span>
                   </label>
 
                   <input
@@ -904,7 +1156,6 @@ const downloadPdfAll = () => {
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Phone
-                    <span class="text-red-500">*</span>
                   </label>
 
                   <input
@@ -917,8 +1168,20 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Customer Name
-                    <span class="text-red-500">*</span>
+                    Email
+                  </label>
+
+                  <input
+                    v-model="form.email"
+                    placeholder="Email Guest Name"
+                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                  />
+                </div>
+                <div class="flex flex-col mb-3">
+                  <label
+                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                  >
+                    Guest Name
                   </label>
 
                   <input
@@ -933,7 +1196,6 @@ const downloadPdfAll = () => {
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Progress
-                    <span class="text-red-500">*</span>
                   </label>
 
                   <!-- Progress -->
@@ -976,10 +1238,10 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    PIC <span class="text-red-500">*</span>
+                    PIC
                   </label>
                   <input
-                    v-model="form.pic"
+                    :value="picName"
                     placeholder="PIC"
                     class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 bg-slate-100 cursor-not-allowed focus:outline-none"
                     readonly
@@ -991,7 +1253,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Segmen <span class="text-red-500">*</span>
+                    Segmen
                   </label>
                   <input
                     v-model="form.segmen"
@@ -1005,7 +1267,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Via <span class="text-red-500">*</span>
+                    Via
                   </label>
                   <input
                     v-model="form.via"
@@ -1014,63 +1276,177 @@ const downloadPdfAll = () => {
                   />
                 </div>
 
-                <!-- Country -->
-                <!-- <div class="flex flex-col mb-3">
-                  <label
-                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
-                  >
-                    Country <span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="form.country"
-                    placeholder="Country"
-                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                  />
-                </div> -->
                 <div class="flex flex-col mb-3">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Country <span class="text-red-500">*</span>
+                    Country
                   </label>
 
                   <div class="relative">
                     <div
-                      @click="showCountryDropdown = !showCountryDropdown"
+                      @click="showCountryModal = true"
                       class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
                     >
-                      <span class="text-slate-700">
-                        {{ form.country || "Select country" }}
-                      </span>
-
+                      <span class="text-slate-700">{{
+                        form.country || "Select country"
+                      }}</span>
                       <ChevronRight
                         class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
-                        :class="showCountryDropdown ? 'rotate-90' : 'rotate-0'"
+                        :class="showCountryModal ? 'rotate-90' : 'rotate-0'"
                       />
                     </div>
-
-                    <ul
-                      v-if="showCountryDropdown"
-                      class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-48 overflow-y-auto hide-scrollbar"
-                    >
-                      <li
-                        v-for="country in countryOptions"
-                        :key="country"
-                        @click="selectCountry(country)"
-                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700"
-                      >
-                        {{ country }}
-                      </li>
-                    </ul>
                   </div>
                 </div>
+
+                <!-- Modal -->
+                <!-- Modal -->
+                <transition name="modal-zoom" appear>
+                  <div
+                    v-if="showCountryModal"
+                    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                  >
+                    <div
+                      class="bg-white rounded-xl max-w-xl w-full relative shadow-2xl overflow-hidden transform transition-all"
+                    >
+                      <!-- Alert -->
+                      <div
+                        v-if="alertMessage"
+                        class="absolute top-16 left-1/2 -translate-x-1/2 px-5 py-2 rounded-lg shadow-md text-white text-center font-semibold text-sm z-50 transition-all"
+                        :class="{
+                          'bg-red-600': alertColor === 'red',
+                          'bg-green-600': alertColor === 'green',
+                          'bg-yellow-600': alertColor === 'yellow',
+                        }"
+                      >
+                        {{ alertMessage }}
+                      </div>
+
+                      <!-- HEADER -->
+                      <div class="px-6 py-5 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold text-slate-800">
+                          Select Country
+                        </h3>
+                        <button
+                          @click="closeCountryModal"
+                          class="absolute top-4 right-4 text-gray-700 hover:text-gray-800 text-xl transition"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <!-- Input + Select + Add -->
+                      <div
+                        class="mt-5 px-6 py-5 flex flex-col sm:flex-row gap-3 items-center"
+                      >
+                        <input
+                          v-model="newCountryInput"
+                          type="text"
+                          placeholder="Add new country"
+                          class="flex-1 p-3 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring focus:ring-blue-200 outline-none transition"
+                        />
+
+                        <!-- Custom select kategori -->
+                        <div class="relative w-full sm:w-40">
+                          <div
+                            @click="
+                              showCategoryDropdown = !showCategoryDropdown
+                            "
+                            class="p-3 bg-white rounded-lg border border-slate-200 cursor-pointer flex justify-between items-center transition"
+                          >
+                            <span class="text-slate-700">{{
+                              newCountryCategory || "Select category"
+                            }}</span>
+                            <svg
+                              class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
+                              :class="
+                                showCategoryDropdown ? 'rotate-180' : 'rotate-0'
+                              "
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M19 9l-7 7-7-7"
+                              ></path>
+                            </svg>
+                          </div>
+                          <ul
+                            v-if="showCategoryDropdown"
+                            class="absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-40 overflow-y-auto z-50 hidden-scroll"
+                          >
+                            <li
+                              v-for="(v, key) in countryCategories"
+                              :key="key"
+                              @click="selectCategory(key)"
+                              class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm"
+                            >
+                              {{ key }}
+                            </li>
+                          </ul>
+                        </div>
+
+                        <!-- Tombol Add -->
+                        <button
+                          @click="addNewCountryToCategory"
+                          class="px-6 py-3 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white rounded-lg shadow-md transition w-full sm:w-auto font-semibold"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      <!-- List kategori + country -->
+                      <div
+                        class="px-6 max-h-80 overflow-y-auto space-y-4 hidden-scroll"
+                      >
+                        <template
+                          v-for="(countries, category) in countryCategories"
+                          :key="category"
+                        >
+                          <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+                            <div
+                              class="font-semibold text-slate-700 mb-3 text-md border-b border-gray-100 pb-2"
+                            >
+                              {{ category }}
+                            </div>
+                            <div
+                              class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"
+                            >
+                              <div
+                                v-for="country in countries"
+                                :key="country"
+                                class="flex items-center justify-between px-4 py-2 rounded-full bg-linear-to-r from-indigo-100 to-blue-100 text-blue-900 font-semibold shadow-md hover:shadow-lg hover:scale-105 transform transition-all cursor-pointer"
+                              >
+                                <span
+                                  @click="selectCountry(country)"
+                                  class="truncate"
+                                >
+                                  {{ country }}
+                                </span>
+                                <button
+                                  @click="deleteCountry(category, country)"
+                                  class="ml-3 text-red-600 hover:text-red-700 text-sm font-bold transition-colors"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
 
                 <!-- Social Media -->
                 <div class="flex flex-col mb-3">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Social Media ID <span class="text-red-500">*</span>
+                    Social Media
                   </label>
                   <input
                     v-model="form.social_media_id"
@@ -1084,7 +1460,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Tour Packages <span class="text-red-500">*</span>
+                    Tour Packages
                   </label>
                   <input
                     v-model="form.tour_packages"
@@ -1098,7 +1474,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Check In <span class="text-red-500">*</span>
+                    Check In
                   </label>
                   <input
                     v-model="form.check_in"
@@ -1112,7 +1488,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Check Out <span class="text-red-500">*</span>
+                    Check Out
                   </label>
                   <input
                     v-model="form.check_out"
@@ -1122,40 +1498,49 @@ const downloadPdfAll = () => {
                 </div>
 
                 <!-- Hotel -->
-                <!-- Hotel -->
-                <div class="flex flex-col mb-3">
+                <!-- HOTEL -->
+                <div class="mb-5">
                   <label
-                    class="flex items-center gap-1 mb-1 font-medium text-slate-700"
+                    class="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-800"
                   >
-                    Hotel <span class="text-red-500">*</span>
+                    Hotel
                   </label>
 
+                  <!-- HOTEL LIST -->
                   <div
                     v-for="(h, index) in form.hotel"
                     :key="index"
-                    class="flex gap-2 mb-2"
+                    class="group flex items-center gap-3 mb-3"
                   >
-                    <input
-                      v-model="form.hotel[index]"
-                      placeholder="Hotel"
-                      class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none flex-1"
-                    />
+                    <!-- INPUT -->
+                    <div class="flex-1 relative">
+                      <input
+                        v-model="form.hotel[index]"
+                        placeholder="Enter name hotel"
+                        class="w-full p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
+                      />
+                    </div>
+
+                    <!-- REMOVE -->
                     <button
+                      v-if="form.hotel.length > 1"
                       type="button"
                       @click="removeHotel(index)"
-                      class="px-3 py-1 bg-red-500 text-white rounded"
-                      v-if="form.hotel.length > 1"
+                      class="w-10 h-10 flex items-center justify-center text-red-600 hover:text-red-700 transition"
+                      title="Hapus hotel"
                     >
-                      -
+                      ✕
                     </button>
                   </div>
 
+                  <!-- ADD BUTTON -->
                   <button
                     type="button"
                     @click="addHotel"
-                    class="px-3 py-1 bg-blue-500 text-white rounded"
+                    class="cursor-pointer inline-flex items-center gap-1 mt-1 px-4 py-2.5 rounded-lg bg-linear-to-br bg-slate-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition"
                   >
-                    + Tambah Hotel
+                    <span class="text-lg leading-none">＋</span>
+                    Add Hotel
                   </button>
                 </div>
 
@@ -1164,7 +1549,7 @@ const downloadPdfAll = () => {
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
-                    Notes <span class="text-red-500">*</span>
+                    Notes
                   </label>
                   <textarea
                     v-model="form.notes"
@@ -1186,50 +1571,67 @@ const downloadPdfAll = () => {
                     class="p-2 border border-slate-300 rounded"
                   />
                 </div>
-                <!-- Existing files (backend) -->
+                <!-- Files Preview Container -->
                 <div
-                  class="flex flex-wrap gap-2 mb-3"
-                  v-if="existingFiles.length"
+                  v-if="existingFiles.length || selectedFiles.length"
+                  class="border border-slate-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-3"
                 >
-                  <div
-                    v-for="file in existingFiles"
-                    :key="file.id"
-                    class="p-2 border rounded bg-slate-100 flex items-center justify-between"
-                  >
-                    <a
-                      :href="file.preview_url"
-                      target="_blank"
-                      class="truncate max-w-[150px]"
-                      >{{ file.original_name }}</a
-                    >
-                    <button
-                      type="button"
-                      @click="removeExistingFile(file.id)"
-                      class="text-red-500"
-                    >
-                      x
-                    </button>
-                  </div>
-                </div>
+                  <!-- Existing files (backend) -->
+                  <div v-if="existingFiles.length">
+                    <p class="text-xs font-medium text-slate-500 mb-2">
+                      Existing Files
+                    </p>
 
-                <!-- Selected files (belum diupload) -->
-                <div
-                  class="flex flex-wrap gap-2 mb-3"
-                  v-if="selectedFiles.length"
-                >
-                  <div
-                    v-for="(file, index) in selectedFiles"
-                    :key="index"
-                    class="p-2 border rounded bg-slate-100 flex items-center justify-between"
-                  >
-                    <span class="truncate max-w-[150px]">{{ file.name }}</span>
-                    <button
-                      type="button"
-                      @click="removeSelectedFile(index)"
-                      class="text-red-500"
-                    >
-                      x
-                    </button>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div
+                        v-for="file in existingFiles"
+                        :key="file.id"
+                        class="flex items-center justify-between gap-2 p-2 border border-slate-300 rounded-md bg-slate-100"
+                      >
+                        <a
+                          :href="file.preview_url"
+                          target="_blank"
+                          class="text-xs truncate flex-1 text-slate-700"
+                        >
+                          {{ file.original_name }}
+                        </a>
+
+                        <button
+                          type="button"
+                          @click="removeExistingFile(file.id)"
+                          class="text-red-500 text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Selected files -->
+                  <div v-if="selectedFiles.length">
+                    <p class="text-xs font-medium text-slate-500 mb-2">
+                      Selected Files
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div
+                        v-for="(file, index) in selectedFiles"
+                        :key="index"
+                        class="flex items-center justify-between gap-2 p-2 border border-slate-300 rounded-md bg-slate-50"
+                      >
+                        <span class="text-xs truncate flex-1 text-slate-700">
+                          {{ file.name }}
+                        </span>
+
+                        <button
+                          type="button"
+                          @click="removeSelectedFile(index)"
+                          class="text-red-500 text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -1238,7 +1640,7 @@ const downloadPdfAll = () => {
               <div class="col-span-2 flex justify-end gap-3 mt-4">
                 <button
                   type="button"
-                  class="border border-blue-900 text-slate-600 hover:bg-blue-50 font-medium px-5 py-2 rounded-lg"
+                  class="cursor-pointer px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg"
                   @click="closeModal"
                 >
                   Cancel
@@ -1246,11 +1648,11 @@ const downloadPdfAll = () => {
 
                 <button
                   type="submit"
-                  class="bg-blue-900 hover:bg-blue-900/90 text-white font-medium px-4 py-2 rounded-lg flex items-center gap-2"
+                  class="cursor-pointer rounded-lg bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-medium px-4 py-2 flex items-center gap-2"
                   :disabled="loadingModal"
                 >
                   <span v-if="loadingModal" class="animate-pulse"
-                    >Loading...</span
+                    >Memproses...</span
                   >
                   <span v-else>
                     {{ editId ? "Update New Customer" : "Create New Customer" }}
@@ -1328,5 +1730,20 @@ const downloadPdfAll = () => {
 .rotate-enter-active,
 .rotate-leave-active {
   transition: all 0.3s ease;
+}
+
+.modal-zoom-enter-active,
+.modal-zoom-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.modal-zoom-enter-from,
+.modal-zoom-leave-to {
+  transform: scale(0.8);
+  opacity: 0;
+}
+.modal-zoom-enter-to,
+.modal-zoom-leave-from {
+  transform: scale(1);
+  opacity: 1;
 }
 </style>

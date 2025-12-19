@@ -55,35 +55,10 @@ const getNewCustomers = async () => {
   loading.value = true;
   try {
     const res = await api.get("/new-customer");
-    newCustomers.value = res.data.data.map((c) => ({
-      id: c.id,
-      date: c.date ?? "",
-      phone: c.phone ?? "",
-      name: c.name ?? "",
-      progress: c.progress ?? "",
-      pic: c.pic ?? "",
-      segmen: c.segmen ?? "",
-      via: c.via ?? "",
-      country: c.country ?? "",
-      social_media_id: c.social_media_id ?? "",
-      tour_packages: c.tour_packages ?? "",
-      check_in: c.check_in ?? "",
-      check_out: c.check_out ?? "",
-      hotel: c.hotel ?? "",
-
-      deal: {
-        handler: c.deal?.handler ?? "",
-        link_drive: c.deal?.link_drive ?? "",
-        total_pax: c.deal?.total_pax ?? "",
-        activity: c.deal?.activity ?? "",
-        payment_status: c.deal?.payment_status ?? "",
-      },
-
-      notes: c.notes ?? "",
-    }));
-    totalItems.value = newCustomers.value.length;
+    newCustomers.value = res.data.data;
+    totalItems.value = res.data.pagination.total;
   } catch (err) {
-    console.error("Error fetching customers:", err);
+    console.error(err);
   } finally {
     loading.value = false;
   }
@@ -98,40 +73,65 @@ const getSummary = async () => {
   }
 };
 
+// filtered
+const safe = (v) => (v ?? "").toString().toLowerCase();
 const filteredCustomers = computed(() => {
+  const keyword = safe(searchKeyword.value);
+
   return newCustomers.value.filter((c) => {
-    const keyword = searchKeyword.value.toLowerCase();
+    const deal = c.latest_deal || {};
+    const transport = deal.transports?.[0] || {};
+    const identity = deal.customer_identity || {};
 
     const matchesKeyword =
-      c.date.toLowerCase().includes(keyword) ||
-      c.phone.toLowerCase().includes(keyword) ||
-      c.name.toLowerCase().includes(keyword) ||
-      c.progress.toLowerCase().includes(keyword) ||
-      c.pic.toLowerCase().includes(keyword) ||
-      c.segmen.toLowerCase().includes(keyword) ||
-      c.via.toLowerCase().includes(keyword) ||
-      c.country.toLowerCase().includes(keyword) ||
-      c.social_media_id.toLowerCase().includes(keyword) ||
-      c.tour_packages.toLowerCase().includes(keyword) ||
-      c.check_in.toLowerCase().includes(keyword) ||
-      c.check_out.toLowerCase().includes(keyword) ||
-      c.hotel.toLowerCase().includes(keyword) ||
-      c.notes.toLowerCase().includes(keyword);
+      // ===== CUSTOMER =====
+      safe(c.date).includes(keyword) ||
+      safe(c.email).includes(keyword) ||
+      safe(c.phone).includes(keyword) ||
+      safe(c.name).includes(keyword) ||
+      safe(c.progress).includes(keyword) ||
+      safe(c.pic).includes(keyword) ||
+      safe(c.segmen).includes(keyword) ||
+      safe(c.via).includes(keyword) ||
+      safe(c.country).includes(keyword) ||
+      safe(c.social_media_id).includes(keyword) ||
+      safe(c.tour_packages).includes(keyword) ||
+      safe(c.check_in).includes(keyword) ||
+      safe(c.check_out).includes(keyword) ||
+      safe(c.hotel).includes(keyword) ||
+      safe(c.notes).includes(keyword) ||
+      // ===== DEAL =====
+      safe(deal.handler).includes(keyword) ||
+      safe(deal.link_drive).includes(keyword) ||
+      safe(deal.total_pax).includes(keyword) ||
+      safe(deal.activity).includes(keyword) ||
+      safe(deal.note_resto).includes(keyword) ||
+      safe(deal.note_hotel).includes(keyword) ||
+      safe(deal.payment_status).includes(keyword) ||
+      // ===== TRANSPORT =====
+      safe(transport.guide).includes(keyword) ||
+      safe(transport.hp_guide).includes(keyword) ||
+      safe(transport.driver).includes(keyword) ||
+      safe(transport.hp_driver).includes(keyword) ||
+      safe(transport.note_operation).includes(keyword) ||
+      safe(transport.report).includes(keyword) ||
+      // ===== CUSTOMER IDENTITY =====
+      safe(identity.id_customer).includes(keyword) ||
+      safe(identity.tanggal_lahir).includes(keyword);
 
-    c.deal?.handler;
-    c.deal?.link_drive;
-    c.deal?.total_pax;
-    c.deal?.activity;
-    c.deal?.payment_status;
+    // ===== FILTER LAIN =====
+    const matchesDate = filterDate.value
+      ? [c.check_in, c.check_out].map(onlyDate).includes(filterDate.value)
+      : true;
 
-    const matchesDate = filterDate.value ? c.date === filterDate.value : true;
     const matchesProgress =
       filterProgress.value !== "all"
         ? c.progress === filterProgress.value
         : true;
+
     const matchesSegmen =
       selectedSegmen.value !== "all"
-        ? c.segmen.toLowerCase() === selectedSegmen.value.toLowerCase()
+        ? safe(c.segmen) === safe(selectedSegmen.value)
         : true;
 
     return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
@@ -213,6 +213,53 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
+
+const downloadTodayPdf = async () => {
+  try {
+    const res = await api.get("/new-customer/report/today", {
+      responseType: "blob",
+    });
+
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `today-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    link.click();
+
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Download PDF failed:", err);
+  }
+};
+
+const socialMediaUrl = (username) => {
+  if (!username) return "#";
+  const clean = username.replace("@", "").trim();
+  return `https://www.instagram.com/${clean}`;
+};
+
+const showHotelModal = ref(false);
+const selectedHotels = ref([]);
+
+// split hotel string → array
+const parseHotels = (hotelString) => {
+  if (!hotelString) return [];
+
+  return hotelString
+    .split(/,|\|/)
+    .map((h) => h.trim())
+    .filter(Boolean);
+};
+const openHotelModal = (hotelString) => {
+  selectedHotels.value = parseHotels(hotelString);
+  showHotelModal.value = true;
+};
+const closeHotelModal = () => {
+  showHotelModal.value = false;
+  selectedHotels.value = [];
+};
 </script>
 
 <template>
@@ -220,7 +267,7 @@ onBeforeUnmount(() => {
     <h2
       class="text-2xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
     >
-      Dashboard
+      Overview
     </h2>
     <p class="text-md mb-6 text-slate-600">
       See all deal, new customer, new chat, and summary report
@@ -230,71 +277,66 @@ onBeforeUnmount(() => {
       <p class="text-xl font-semibold mb-1 text-slate-800">{{ currentDate }}</p>
       <p class="text-md text-slate-600">Daily performance overview</p>
     </div>
-
     <!-- Summary -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
       <!-- Total Customers -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
+        class="bg-linear-to-br from-indigo-700 to-blue-700 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
       >
-        <Users class="w-6 h-6 text-blue-800 mb-1" />
+        <Users class="w-6 h-6 text-white mb-1" />
         <p class="font-medium text-md">Total</p>
-        <h3 class="text-xl font-bold text-slate-900">{{ summary.total }}</h3>
-        <p class="text-sm text-slate-500">New Customer</p>
+        <h3 class="text-2xl font-bold">{{ summary.total }}</h3>
+        <p class="text-sm">New Customer</p>
       </div>
 
       <!-- On Progress -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
+        class="bg-linear-to-br from-yellow-500/90 to-yellow-500/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
       >
-        <Loader class="w-6 h-6 text-yellow-600 mb-1" />
+        <Loader class="w-6 h-6 text-white mb-1 e" />
         <p class="font-medium text-md">On Progress</p>
-        <h3 class="text-xl font-bold text-slate-900">
-          {{ summary.onProgress }}
-        </h3>
-        <p class="text-sm text-slate-500">Currently handled</p>
+        <h3 class="text-2xl font-bold">{{ summary.onProgress }}</h3>
+        <p class="text-sm">Currently handled</p>
       </div>
 
       <!-- Deal -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
+        class="bg-linear-to-br from-green-500/90 to-green-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
       >
-        <CheckCircle2 class="w-6 h-6 text-green-600 mb-1" />
+        <CheckCircle2 class="w-6 h-6 text-white mb-1" />
         <p class="font-medium text-md">Deal</p>
-        <h3 class="text-xl font-bold text-slate-900">{{ summary.deal }}</h3>
-        <p class="text-sm text-slate-500">Closed successfully</p>
+        <h3 class="text-2xl font-bold">{{ summary.deal }}</h3>
+        <p class="text-sm">Closed successfully</p>
       </div>
 
       <!-- Canceled -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center gap-1"
+        class="bg-linear-to-br from-red-500/90 to-red-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
       >
-        <XCircle class="w-6 h-6 text-red-600 mb-1" />
+        <XCircle class="w-6 h-6 text-white mb-1" />
         <p class="font-medium text-md">Canceled</p>
-        <h3 class="text-xl font-bold text-slate-900">
-          {{ summary.canceled }}
-        </h3>
-        <p class="text-sm text-slate-500">Canceled orders</p>
+        <h3 class="text-2xl font-bold">{{ summary.canceled }}</h3>
+        <p class="text-sm">Canceled orders</p>
       </div>
 
       <!-- Download -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-xl shadow-md border border-slate-300 flex flex-col items-center justify-center gap-2"
+        class="bg-white text-slate-700 p-5 rounded-2xl shadow-lg flex flex-col items-center justify-center gap-3 hover:shadow-xl transition"
       >
-        <Download class="w-6 h-6 text-blue-800" />
+        <Download class="w-6 h-6 text-blue-700" />
         <p class="font-medium text-sm sm:text-base">Today's Report</p>
         <button
-          class="underline text-blue-600 hover:text-blue-800 text-sm sm:text-base"
-          @click=""
+          class="bg-linear-to-br from-indigo-700 to-blue-700 text-white font-normal text-md px-4 py-2 rounded-lg shadow hover:from-indigo-600 hover:to-blue-600 transition"
+          @click="downloadTodayPdf"
         >
-          Download CSV
+          Download PDF
         </button>
       </div>
     </div>
 
     <!-- Filter -->
     <div
-      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl shadow border border-slate-200"
+      class="text-[15px] mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-xl border border-slate-200"
     >
       <!-- Search -->
       <div class="relative">
@@ -304,7 +346,7 @@ onBeforeUnmount(() => {
           @focus="closeAllDropdowns()"
           type="text"
           placeholder="Search..."
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -316,7 +358,7 @@ onBeforeUnmount(() => {
           v-model="filterDate"
           @focus="closeAllDropdowns()"
           type="date"
-          class="w-full border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
       </div>
 
@@ -327,7 +369,7 @@ onBeforeUnmount(() => {
             closeAllDropdowns();
             showProgressDropdown = !showProgressDropdown;
           "
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full hover:shadow-md transition border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -341,7 +383,7 @@ onBeforeUnmount(() => {
         <transition name="dropdown">
           <div
             v-if="showProgressDropdown"
-            class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
             <div
               class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
@@ -390,7 +432,7 @@ onBeforeUnmount(() => {
             closeAllDropdowns();
             showSegmenDropdown = !showSegmenDropdown;
           "
-          class="w-full border border-slate-300 rounded-lg px-3 py-2 flex items-center justify-between"
+          class="w-full border border-slate-300 hover:shadow-md transition rounded-lg px-3 py-2 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <Filter class="w-4 h-4 text-slate-500" />
@@ -407,7 +449,7 @@ onBeforeUnmount(() => {
             class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto hidden-scroll max-h-[200px]"
           >
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 hover:bg-blue-50"
               @click="
                 selectedSegmen = 'all';
                 showSegmenDropdown = false;
@@ -419,7 +461,7 @@ onBeforeUnmount(() => {
             <div
               v-for="segment in uniqueSegmens"
               :key="segment"
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              class="px-3 py-2 hover:bg-blue-50 capitalize"
               @click="
                 selectedSegmen = segment;
                 showSegmenDropdown = false;
@@ -434,7 +476,7 @@ onBeforeUnmount(() => {
       <!-- Reset -->
       <button
         @click="resetFilters"
-        class="flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-800 text-white font-semibold py-2 px-4 rounded-lg shadow"
+        class="cursor-pointer flex items-center justify-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition"
       >
         <RotateCcw class="w-4 h-4" />
         Reset
@@ -442,32 +484,167 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Table -->
-    <div class="overflow-x-auto rounded-lg shadow-sm hidden-scroll">
-      <table
-        class="min-w-full bg-white border border-slate-200 rounded-lg text-sm table-fixed"
-      >
-        <thead class="bg-blue-900 text-white">
+    <div
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+    >
+      <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
+        <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
           <tr>
             <th class="px-4 py-3 text-left">No</th>
-            <th class="px-4 py-3 text-left w-[10%]">Date</th>
-            <th class="px-4 py-3 text-left w-[12%]">Phone</th>
-            <th class="px-4 py-3 text-left w-[14%]">Customer Name</th>
-            <th class="px-4 py-3 text-left w-[10%]">Progress</th>
-            <th class="px-4 py-3 text-left w-[10%]">PIC</th>
-            <th class="px-4 py-3 text-left w-[8%]">Segmen</th>
-            <th class="px-4 py-3 text-left w-[6%]">Via</th>
-            <th class="px-4 py-3 text-left w-[8%]">Country</th>
-            <th class="px-4 py-3 text-left w-[8%]">Social Media</th>
-            <th class="px-4 py-3 text-left w-[12%]">Tour Packages</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check In</th>
-            <th class="px-4 py-3 text-left w-[8%]">Check Out</th>
-            <th class="px-4 py-3 text-left w-[8%]">Hotel</th>
-            <th class="px-4 py-3 text-left w-[10%]">Handler</th>
-            <th class="px-4 py-3 text-left w-[12%]">Link Drive</th>
-            <th class="px-4 py-3 text-left w-[8%]">Total Pax</th>
-            <th class="px-4 py-3 text-left w-[10%]">Activity</th>
-            <th class="px-4 py-3 text-left w-[10%]">Payment Status</th>
-            <th class="px-4 py-3 text-left w-[12%]">Notes</th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Date
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Phone
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[14%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Email
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[14%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Guest Name
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check In
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Check Out
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Tour Packages
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Country
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Progress
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              PIC
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Segmen
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[6%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Via
+            </th>
+
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Social Media
+            </th>
+
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Hotel
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Handler
+            </th>
+            <!-- <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Link Drive
+            </th> -->
+            <th
+              class="px-4 py-3 text-left w-[8%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Total Pax
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Activity
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Resto
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Hotel
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[10%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Payment Status
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Notes
+            </th>
+
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Guide
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Hp Guide
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Driver
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Hp Driver
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Note Operation
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Report
+            </th>
+
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Passport/Ktp
+            </th>
+            <th
+              class="px-4 py-3 text-left w-[12%] whitespace-nowrap overflow-hidden text-ellipsis"
+            >
+              Tanggal Lahir
+            </th>
           </tr>
         </thead>
 
@@ -496,64 +673,254 @@ onBeforeUnmount(() => {
             :key="c.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
-            <td class="px-4 py-2">{{ i + 1 }}</td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.date }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.phone }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.name }}</td>
+            <!-- No -->
+            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
 
-            <td class="px-4 py-3 align-middle text-left">
+            <!-- Date -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.date ?? "-" }}</td>
+
+            <!-- Phone -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.phone ?? "-" }}</td>
+
+            <!-- Email -->
+            <td class="px-4 py-3">{{ c.email ?? "-" }}</td>
+
+            <!-- Guest Name -->
+            <td class="px-4 py-3">{{ c.name ?? "-" }}</td>
+
+            <!-- Check In -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.check_in ?? "-" }}</td>
+
+            <!-- Check Out -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.check_out ?? "-" }}
+            </td>
+
+            <!-- Tour Packages -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.tour_packages ?? "-" }}
+            </td>
+
+            <!-- Country -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.country ?? "-" }}</td>
+
+            <!-- Progress -->
+            <td class="px-4 py-3 whitespace-nowrap">
               <span
                 :class="[
                   'inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold w-24',
                   progressColor(c.progress),
                 ]"
               >
-                {{ c.progress }}
+                {{ c.progress ?? "-" }}
               </span>
             </td>
 
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.pic }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.segmen }}</td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.via }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.country }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
+            <!-- PIC -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.pic ?? "-" }}</td>
+
+            <!-- Segmen -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.segmen ?? "-" }}</td>
+
+            <!-- Via -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.via ?? "-" }}</td>
+
+            <!-- Social Media -->
+            <td class="px-4 py-3 whitespace-nowrap">
               <a
-                :href="c.social_media_id"
+                v-if="c.social_media_id"
+                :href="socialMediaUrl(c.social_media_id)"
                 target="_blank"
-                class="text-blue-600 underline hover:text-blue-800"
+                rel="noopener noreferrer"
+                class="text-blue-600 underline"
               >
-                {{ c.social_media_id }}
+                {{ c.social_media_id ?? "-" }}
               </a>
+              <span v-else>-</span>
             </td>
 
-            <td class="px-4 py-3 align-middle text-left">
-              {{ c.tour_packages }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.check_in }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
-              {{ c.check_out }}
-            </td>
-            <td class="px-4 py-3 align-middle text-left">{{ c.hotel }}</td>
+            <!-- Hotel -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              <button
+                v-if="c.hotel"
+                @click="openHotelModal(c.hotel)"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 transition"
+              >
+                View
+              </button>
 
-            <td>{{ c.deal?.handler }}</td>
-            <td>{{ c.deal?.link_drive }}</td>
-            <td>{{ c.deal?.total_pax }}</td>
-            <td>{{ c.deal?.activity }}</td>
-            <td>{{ c.deal?.payment_status }}</td>
+              <span v-else>-</span>
+            </td>
+            <!-- HOTEL MODAL -->
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 scale-95"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div
+                v-if="showHotelModal"
+                class="px-2 fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                @click.self="closeHotelModal"
+              >
+                <!-- Modal Card -->
+                <div
+                  class="bg-white w-full max-w-xl rounded-xl shadow-md overflow-hidden"
+                >
+                  <!-- Header -->
+                  <div class="px-6 py-4 flex items-center justify-between">
+                    <h3 class="text-md font-semibold text-black">
+                      Hotel List
+                      <span class="ml-2 text-sm text-gray-500">
+                        ({{ selectedHotels.length }})
+                      </span>
+                    </h3>
 
-            <td class="px-4 py-3 align-middle text-left">{{ c.notes }}</td>
+                    <button
+                      @click="closeHotelModal"
+                      class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-200 text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <!-- Content -->
+                  <div class="p-6">
+                    <div
+                      v-if="selectedHotels.length"
+                      class="flex flex-col gap-3 max-h-80 overflow-y-auto hide-scrollbar"
+                    >
+                      <div
+                        v-for="(hotel, i) in selectedHotels"
+                        :key="i"
+                        class="rounded-lg border border-slate-200 px-4 py-3 bg-slate-50 hover:bg-white hover:shadow-sm transition"
+                      >
+                        <p
+                          class="text-sm font-medium text-slate-800 leading-snug"
+                        >
+                          {{ hotel }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p v-else class="text-sm text-center text-slate-500 py-8">
+                      No hotel data
+                    </p>
+                  </div>
+
+                  <!-- Footer -->
+                  <div class="px-6 py-4 flex justify-end">
+                    <button
+                      @click="closeHotelModal"
+                      class="px-4 py-2 text-sm rounded-lg bg-slate-800 text-white hover:bg-slate-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- Handler -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.handler ?? "-" }}
+            </td>
+
+            <!-- Link Drive -->
+            <!-- <td class="px-4 py-3 whitespace-nowrap">
+              <a
+                v-if="c.latest_deal?.link_drive"
+                :href="c.latest_deal.link_drive"
+                target="_blank"
+                class="text-blue-600 underline"
+              >
+                Drive
+              </a>
+              <span v-else>-</span>
+            </td> -->
+
+            <!-- Total Pax -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.total_pax ?? "-" }}
+            </td>
+
+            <!-- Activity -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.activity ?? "-" }}
+            </td>
+
+            <!-- Note Resto -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.note_resto ?? "-" }}
+            </td>
+
+            <!-- Note Hotel -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.note_hotel ?? "-" }}
+            </td>
+
+            <!-- Payment Status -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              <span
+                v-if="c.latest_deal?.payment_status"
+                :class="[
+                  'inline-flex items-center justify-center',
+                  'w-20 px-2 py-1',
+                  'rounded-full text-xs font-semibold text-center',
+                  c.latest_deal.payment_status === 'paid'
+                    ? 'bg-yellow-100 text-yellow-700 border border-yellow-200 '
+                    : 'bg-green-100 text-green-700 border border-green-200',
+                ]"
+              >
+                {{ c.latest_deal.payment_status ?? "-" }}
+              </span>
+              <span v-else>-</span>
+            </td>
+
+            <!-- Notes -->
+            <td class="px-4 py-3 whitespace-nowrap">{{ c.notes ?? "-" }}</td>
+
+            <!-- Guide -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.guide ?? "-" }}
+            </td>
+
+            <!-- Hp Guide -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.hp_guide ?? "-" }}
+            </td>
+
+            <!-- Driver -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.driver ?? "-" }}
+            </td>
+
+            <!-- Hp Driver -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.hp_driver ?? "-" }}
+            </td>
+
+            <!-- Note Operation -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.note_operation ?? "-" }}
+            </td>
+
+            <!-- Report -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.transports?.[0]?.report ?? "-" }}
+            </td>
+
+            <!-- Passport / KTP -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.customer_identity?.id_customer ?? "-" }}
+            </td>
+
+            <!-- Tanggal Lahir -->
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.latest_deal?.customer_identity?.tanggal_lahir ?? "-" }}
+            </td>
           </tr>
         </tbody>
       </table>

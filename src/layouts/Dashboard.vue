@@ -54,9 +54,7 @@ watch(collapsed, (val) => {
         @toggleSidebar="collapsed = !collapsed"
       />
 
-      <main
-        class="p-0 md:p-6 lg:p-6 flex-1 overflow-auto hidden-scroll bg-blue-50/60"
-      >
+      <main class="p-0 md:p-6 lg:p-6 flex-1 overflow-auto hidden-scroll">
         <router-view />
       </main>
     </div>

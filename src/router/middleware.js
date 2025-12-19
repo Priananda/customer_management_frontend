@@ -4,8 +4,10 @@ export function authGuard(to, from) {
   const auth = useAuthStore();
   const user = auth.user;
 
-  // Conditional for user 
   if (!user) {
+    if (to.path.startsWith("/dashboard")) {
+      return { path: "/login-admin" };
+    }
 
     if (to.meta.allowedRoles?.includes("pic") || to.meta.allowedRoles?.includes("staff")) {
       return { path: "/login-pic-staff" };
@@ -20,17 +22,15 @@ export function authGuard(to, from) {
     }
 
     // Fallback
-    return { path: "/login-pic-staff" };
+    return { path: "/login-admin" };
   }
 
-  // User is logged in, check role
-  const role = user.role;
 
+  const role = user.role;
   if (to.meta.allowedRoles && !to.meta.allowedRoles.includes(role)) {
     alert("Anda tidak memiliki akses ke halaman ini");
     return false;
   }
 
-  // If role matches, continue
-  return true; 
+  return true;
 }

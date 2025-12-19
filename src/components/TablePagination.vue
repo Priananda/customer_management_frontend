@@ -25,7 +25,7 @@ function nextPage() {
 </script>
 
 <template>
-  <div class="flex items-center justify-center mt-4 text-sm gap-3">
+  <div class="flex items-center justify-center mt-6 text-sm gap-3">
     <button
       class="px-3 py-1 rounded shadow bg-blue-900 text-white disabled:bg-blue-300"
       :disabled="props.currentPage === 1"

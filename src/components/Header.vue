@@ -8,9 +8,11 @@ const props = defineProps({
 
 const emit = defineEmits(["toggleSidebar"]);
 
-function formatName(name) {
+function lastName(name) {
   if (!name) return "";
-  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  const parts = name.trim().split(" ");
+  const last = parts[parts.length - 1];
+  return last.charAt(0).toUpperCase() + last.slice(1).toLowerCase();
 }
 </script>
 
@@ -20,11 +22,11 @@ function formatName(name) {
       <Menu class="w-6 h-6 text-gray-700 hover:text-gray-800" />
     </button>
 
-    <p class="text-lg font-semibold">Customer Management</p>
+    <p class="text-lg font-medium">CS Management</p>
 
     <p class="text-lg font-semibold ml-auto text-end">
       Welcome,
-      {{ formatName(user.name) }}
+      {{ lastName(user.name) }}
     </p>
   </header>
 </template>
