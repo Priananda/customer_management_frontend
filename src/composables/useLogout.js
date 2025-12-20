@@ -31,7 +31,7 @@ export function useLogout() {
         router.push("/login-super-admin");
         break;
       default:
-        router.push("/login-admin"); // fallback
+        router.push("/login-admin"); 
     }
   };
 

@@ -2,10 +2,8 @@
 import { ref, computed } from "vue";
 import { Home, UserPlus, LogOut, ChevronDown } from "lucide-vue-next";
 import { useAuthStore } from "../stores/auth.js";
+import checklist from "@/assets/images/checklist.png";
 
-/* =====================
-   STATE & STORE
-===================== */
 const authStore = useAuthStore();
 const isLoggingOut = ref(false);
 
@@ -17,27 +15,19 @@ const openMenu = ref({
   uploadcsv: false,
 });
 
-/* =====================
-   PROPS
-===================== */
 const props = defineProps({
   collapsed: Boolean,
 });
 
-/* =====================
-   COMPUTED
-===================== */
 const user = computed(() => authStore.user);
 const role = computed(() => authStore.user?.role || "");
 
-// Ambil nama panggilan (kata terakhir)
 const lastName = computed(() => {
   if (!user.value?.name) return "";
   const parts = user.value.name.trim().split(" ");
   return parts[parts.length - 1];
 });
 
-// Inisial nama
 const nameInitial = computed(() => {
   if (!user.value?.name) return "";
   return user.value.name
@@ -46,9 +36,6 @@ const nameInitial = computed(() => {
     .join("");
 });
 
-/* =====================
-   METHODS
-===================== */
 function toggleMenu(name) {
   openMenu.value[name] = !openMenu.value[name];
 }
@@ -75,17 +62,14 @@ function handleLinkClick() {
       v-if="!props.collapsed"
       class="w-64 fixed top-0 left-0 bottom-0 flex flex-col z-50 shadow-xl rounded-tr-xl rounded-br-xl overflow-hidden bg-linear-to-br from-indigo-800 to-blue-800"
     >
-      <!-- USER HEADER -->
       <div class="p-4 relative">
         <div class="flex items-center gap-3 mt-2 mb-2">
-          <!-- Avatar -->
           <div
             class="bg-white text-indigo-800 font-bold rounded-full w-10 h-10 flex items-center justify-center text-sm shadow-lg"
           >
             {{ nameInitial }}
           </div>
 
-          <!-- Name -->
           <div class="flex flex-col">
             <p class="text-md font-semibold text-white">
               {{ lastName }}
@@ -99,11 +83,15 @@ function handleLinkClick() {
           </div>
         </div>
 
-        <p class="mt-5 text-sm text-center text-white/80">
-          Customer Management
-        </p>
+        <div class="mt-6 flex items-center justify-center gap-2">
+          <img
+            :src="checklist"
+            alt="Checklist"
+            class="w-8 h-8 object-contain"
+          />
+          <p class="text-sm text-white/80">Customer Management</p>
+        </div>
 
-        <!-- Close -->
         <button
           @click="emit('toggle')"
           class="absolute top-4 right-4 text-white hover:text-gray-200"
@@ -112,7 +100,6 @@ function handleLinkClick() {
         </button>
       </div>
 
-      <!-- MENU -->
       <nav
         class="text-[15px] flex-1 px-2 mt-4 space-y-3 overflow-y-auto hidden-scroll"
       >
@@ -161,7 +148,6 @@ function handleLinkClick() {
         </div>
       </nav>
 
-      <!-- LOGOUT -->
       <button
         @click="handleLogout"
         class="m-4 px-4 py-2 flex items-center justify-center gap-2 bg-white text-blue-800 rounded-lg shadow hover:bg-white/90"

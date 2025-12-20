@@ -14,54 +14,52 @@ import {
 import TransportList from "..//components/TransportList.vue";
 import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import note from "@/assets/images/note.png";
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+} from "vue";
 import CustomerIdentity from "../components/CustomerIdentity.vue";
 import api from "../api/api";
 
 // State
 const selectedCustomer = ref(null);
-const deals = ref([]); // raw deal-customer API (optional)
-const newCustomers = ref([]); // raw new-customer API (optional)
-const combinedData = ref([]); // [{ new_customer, deal_customer }]
+const deals = ref([]);
+const newCustomers = ref([]);
+const combinedData = ref([]);
 const searchKeyword = ref("");
 const filterDate = ref("");
 const filterProgress = ref("all");
 const selectedSegmen = ref("all");
-
-// Indikator loading button save
 const isLoading = ref(false);
 
-// dropdown state
 const customerDropdownRef = ref(null);
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
 
-// dropdown select customer
 const showCustomerDropdown = ref(false);
 const selectedCustomerText = ref("");
 
-// Batal edit
 const isEditing = ref(false);
 const originalDealData = ref(null);
 
-// alert button save dan edit
 const alertMessage = ref("");
 const alertType = ref("");
 const showAlert = ref(false);
 
-// loading tabel
 const loading = ref(false);
 
-// Paginasi
 const currentPage = ref(1);
 const pageSize = ref(10);
 const totalItems = ref(0);
 
-// Search customer to select customer and animation
 const customerSearch = ref("");
 const focusInputSearch = ref(false);
 
-// Milik new customer
 const editFormNewCustomer = ref({
   date: "",
   phone: "",
@@ -79,7 +77,6 @@ const editFormNewCustomer = ref({
   notes: "",
 });
 
-// Milik Deal customer
 const dealForm = ref({
   id: null,
   new_customer_id: "",
@@ -91,7 +88,6 @@ const dealForm = ref({
   note_resto: "",
   payment_status: "",
 
-  // penting!!
   transport: [
     {
       guide: "",
@@ -110,13 +106,11 @@ const progressOptions = ["on progress", "canceled", "deal"];
 
 const showCountryDropdown = ref(false);
 
-/* input add country */
 const showEditCountryModal = ref(false);
 const newEditCountryInput = ref("");
 const newEditCountryCategory = ref("");
 const showEditCategoryDropdown = ref(false);
 
-/* data country */
 const countryCategories = ref({
   Asia: ["India", "China", "Japan", "Korea Selatan"],
   ASEAN: [
@@ -132,15 +126,11 @@ const countryCategories = ref({
   Australia: ["Australia", "New Zealand"],
 });
 
-/* ================= ACTION ================= */
-
-// pilih country
 const selectEditCountry = (country) => {
   editFormNewCustomer.value.country = country;
   showEditCountryModal.value = false;
 };
 
-// hapus country
 const deleteEditCountry = (category, country) => {
   countryCategories.value[category] = countryCategories.value[category].filter(
     (c) => c !== country
@@ -151,18 +141,14 @@ const deleteEditCountry = (category, country) => {
   }
 };
 
-// close modal
 const closeEditCountryModal = () => {
   showEditCountryModal.value = false;
 };
 
-// pilih kategori
 const selectEditCategory = (category) => {
   newEditCountryCategory.value = category;
   showEditCategoryDropdown.value = false;
 };
-
-/* ================= ALERT ================= */
 
 const alertMessageFormDeal = ref("");
 const alertColor = ref("red");
@@ -172,8 +158,6 @@ const showAlertFormDeal = (message, color = "red") => {
   alertColor.value = color;
   setTimeout(() => (alertMessageFormDeal.value = ""), 4000);
 };
-
-/* ================= ADD COUNTRY ================= */
 
 const addNewEditCountryToCategory = () => {
   const country = newEditCountryInput.value.trim();
@@ -205,7 +189,6 @@ const addNewEditCountryToCategory = () => {
   showEditCountryModal.value = false;
 };
 
-// Modal delete
 const showDeleteModal = ref(false);
 const selectedId = ref(null);
 const deleteType = ref(null);
@@ -224,7 +207,6 @@ const loadData = async () => {
     newCustomers.value = ncRes.data?.data || [];
     deals.value = dcRes.data?.data || [];
 
-    // 🔥 INI PENTING
     deletedDealCustomerIds.value = dcRes.data?.deleted_new_customer_ids || [];
 
     combinedData.value = newCustomers.value
@@ -234,7 +216,6 @@ const loadData = async () => {
           (d) => Number(d.new_customer_id) === Number(nc.id)
         );
 
-        // ✅ ADA DEAL ASLI
         if (deal) {
           return {
             new_customer: nc,
@@ -242,12 +223,10 @@ const loadData = async () => {
           };
         }
 
-        // ⛔ DEAL PERNAH DIHAPUS → JANGAN BUAT DUMMY
         if (deletedDealCustomerIds.value.includes(nc.id)) {
           return null;
         }
 
-        // ✅ BOLEH DUMMY (BELUM PERNAH DIHAPUS)
         return {
           new_customer: nc,
           deal_customer: {
@@ -271,8 +250,6 @@ const loadData = async () => {
     loading.value = false;
   }
 };
-
-// Urusan cancel
 
 const onSelectCustomer = () => {
   selectedCustomer.value = newCustomers.value.find(
@@ -299,12 +276,11 @@ const handleTransportFiles = (e, index) => {
   const files = Array.from(e.target.files);
   dealForm.value.transport[index].foto.push(...files);
 };
-// Hapus file baru (belum diupload) dari transport
+
 const removeTransportFile = (trIndex, fIndex) => {
   const transport = dealForm.value.transport?.[trIndex];
   if (!transport || !Array.isArray(transport.foto)) return;
 
-  // pastikan fIndex valid
   if (fIndex < 0 || fIndex >= transport.foto.length) return;
 
   transport.foto.splice(fIndex, 1);
@@ -317,7 +293,6 @@ const removeExistingTransportFile = (trIndex, fIndex, file) => {
 
   transport.foto_existing.splice(fIndex, 1);
 
-  // Optional: hapus di backend
   if (file?.id) {
     api
       .delete(`/transport-files/${file.id}`)
@@ -367,12 +342,8 @@ const handleSave = async () => {
     });
   }
 
-  // ID new_customer (wajib)
   fd.append("new_customer_id", dealForm.value.new_customer_id);
 
-  // ==========================
-  // 2. DEAL CUSTOMER FIELDS
-  // ==========================
   Object.keys(dealForm.value).forEach((key) => {
     const val = dealForm.value[key];
     if (key === "transport") return;
@@ -382,17 +353,11 @@ const handleSave = async () => {
     }
   });
 
-  // ==========================
-  // DEBUG: console log FormData
-  // ==========================
   console.log("=== FormData Entries ===");
   for (let pair of fd.entries()) {
     console.log(pair[0], pair[1]);
   }
 
-  // ==========================
-  // 3. TRANSPORT + FILES
-  // ==========================
   dealForm.value.transport.forEach((tr, i) => {
     fd.append(`transport[${i}][id]`, tr.id ?? "");
     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
@@ -411,16 +376,10 @@ const handleSave = async () => {
     });
   });
 
-  // ==========================
-  // 4. FILE UMUM DEAL
-  // ==========================
   dealSelectedFiles.value.forEach((file) => {
     fd.append("files[]", file);
   });
 
-  // ==========================
-  // DEBUG: cek selectedCustomer
-  // ==========================
   console.log("selectedCustomer.value:", selectedCustomer.value);
   console.log("dealForm.value:", dealForm.value);
 
@@ -456,7 +415,6 @@ const confirmDelete = async () => {
     if (deleteType.value === "deal") {
       await api.delete(`/deal-customer/${selectedId.value}`);
 
-      // 🔥 simpan new_customer_id yang deal-nya dihapus
       const row = combinedData.value.find(
         (r) => r.deal_customer?.id === selectedId.value
       );
@@ -511,20 +469,21 @@ const reset = () => {
 };
 onMounted(loadData);
 
-// Filtered list based on search + filters
+const formatDate = (dateStr) => dateStr?.substring(0, 10) || "";
+const isFiltering = ref(false);
 const filteredDeals = computed(() => {
+  isFiltering.value = true;
+
   const keyword = searchKeyword.value.trim().toLowerCase();
   const dateFilter = filterDate.value;
   const progressFilter = filterProgress.value;
   const segmenFilter = selectedSegmen.value;
 
-  return combinedData.value.filter((item) => {
+  const result = combinedData.value.filter((item) => {
     const c = item.new_customer || {};
     const d = item.deal_customer || {};
 
-    // ------------------------------
     // 1. Gabungkan field Customer + Deal
-    // ------------------------------
     const customerDealFields = [
       c.email,
       c.name,
@@ -554,12 +513,10 @@ const filteredDeals = computed(() => {
       )
       .join(" ");
 
-    // ------------------------------
     // 2. Gabungkan field Transport
-    // ------------------------------
     const transportFields = (d.transports || [])
-      .map((t) => {
-        return [
+      .map((t) =>
+        [
           t.guide,
           t.driver,
           t.hp_guide,
@@ -568,44 +525,50 @@ const filteredDeals = computed(() => {
           t.report,
           ...(t.foto || []).map((f) => f.file_name || f.original || ""),
         ]
-          .filter((f) => f) // buang null/undefined
+          .filter((f) => f)
           .map((f) => String(f).toLowerCase())
-          .join(" ");
-      })
+          .join(" ")
+      )
       .join(" ");
 
-    // ------------------------------
     // 3. Keyword matching
-    // ------------------------------
     const matchesKeyword = keyword
       ? (customerDealFields + " " + transportFields).includes(keyword)
       : true;
 
-    // ------------------------------
     // 4. Filter lain: date, progress, segmen
-    // ------------------------------
     const matchesDate = dateFilter
-      ? c.date?.substring(0, 10) === dateFilter ||
-        c.check_in?.substring(0, 10) === dateFilter ||
-        c.check_out?.substring(0, 10) === dateFilter
+      ? formatDate(c.date) === dateFilter ||
+        formatDate(c.check_in) === dateFilter ||
+        formatDate(c.check_out) === dateFilter
       : true;
 
     const matchesProgress =
       progressFilter && progressFilter !== "all"
         ? (c.progress || "").toLowerCase() === progressFilter.toLowerCase()
         : true;
+
     const matchesSegmen =
       segmenFilter && segmenFilter !== "all"
         ? (c.segmen || "").toLowerCase() === segmenFilter.toLowerCase()
         : true;
 
-    const result =
-      matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
-    return result;
+    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
   });
+
+  nextTick(() => {
+    setTimeout(() => {
+      isFiltering.value = false;
+    }, 300);
+  });
+
+  return result;
 });
 
-// unique segmens from combinedData
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
+  currentPage.value = 1;
+});
+
 const uniqueSegmens = computed(() => {
   const seg = new Set();
   combinedData.value.forEach((item) => {
@@ -615,8 +578,13 @@ const uniqueSegmens = computed(() => {
   return Array.from(seg);
 });
 
-// Reset Filters
+const isRotating = ref(false);
 const resetFilters = () => {
+  isRotating.value = true;
+  setTimeout(() => {
+    isRotating.value = false;
+  }, 600);
+
   searchKeyword.value = "";
   filterDate.value = "";
   filterProgress.value = "all";
@@ -638,12 +606,11 @@ const closeAllDropdowns = () => {
   showSegmenDropdown.value = false;
 };
 
-// select progress
 const selectProgress = (val) => {
   filterProgress.value = val;
   showProgressDropdown.value = false;
 };
-// select segmen
+
 const selectSegmen = (val) => {
   selectedSegmen.value = val;
   showSegmenDropdown.value = false;
@@ -756,7 +723,6 @@ const progressWidthModal = (progress) => {
 const paginatedDataCustomers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const list = filteredDeals.value;
-  // update totalItems for pagination UI
   totalItems.value = list.length;
   return list.slice(start, start + pageSize.value);
 });
@@ -766,7 +732,6 @@ watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
 });
 
 const openDeleteModal = (row) => {
-  // row is combinedData item
   if (row.deal_customer?.id) {
     deleteType.value = "deal";
     selectedId.value = row.deal_customer.id;
@@ -832,7 +797,7 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
       const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
 
       dealFilesApi = (dealRes.data.files ?? [])
-        .filter((f) => f.real_id) // ⬅️ FILTER KUNCI
+        .filter((f) => f.real_id)
         .map((f) => ({
           id: `dc-${f.real_id}`,
           real_id: f.real_id,
@@ -880,9 +845,6 @@ const isDealFile = (file) => {
 const editDeal = (d) => {
   isEditing.value = true;
 
-  // =============================
-  // SET TRANSPORT (array input)
-  // =============================
   const transportData = d.deal_customer?.transports?.length
     ? d.deal_customer.transports.map((t) => ({
         id: t.id,
@@ -910,11 +872,8 @@ const editDeal = (d) => {
         },
       ];
 
-  // ========================================
-  // ASSIGN dealForm TANPA MENGHAPUS transport
-  // ========================================
   dealForm.value = {
-    ...dealForm.value, // <-- PENTING agar transport tidak hilang!
+    ...dealForm.value,
     transport: transportData,
 
     id: d.deal_customer?.id ?? null,
@@ -928,9 +887,6 @@ const editDeal = (d) => {
     payment_status: d.deal_customer?.payment_status ?? "",
   };
 
-  // =============================
-  // EDIT CUSTOMER INFO
-  // =============================
   editFormNewCustomer.value = {
     email: d.new_customer?.email ?? "",
     date: d.new_customer?.date ?? "",
@@ -952,9 +908,6 @@ const editDeal = (d) => {
     notes: d.new_customer?.notes ?? "",
   };
 
-  // =============================
-  // FILES
-  // =============================
   dealSelectedFiles.value = [];
   loadFiles(d.deal_customer?.id ?? null, d.new_customer?.id ?? null);
 
@@ -1124,7 +1077,6 @@ const downloadFile = (file) => {
   } else if (file.source === "transport") {
     url = `http://127.0.0.1:8000/files/download/transport/${file.transport_id}/${file.file_name}`;
   } else if (file.source === "customer_identity") {
-    // ✅ TAMBAHKAN INI
     url = `http://127.0.0.1:8000/files/download/customer-identity/${file.original_name}`;
   }
 
@@ -1175,10 +1127,15 @@ const cancelDeal = async () => {
   }
 };
 
-// (SEMUA HALAMAN INI ADA PENAMBAHAN LABEL PADA DEAL DAN GANTI TIPE DATA )
 // Dowload PDF NEW + DEAL CUSTOMER
+const isBouncing = ref(false);
 const downloadPdf = () => {
-  window.open("http://127.0.0.1:8000/deal-customer/pdf", "_blank");
+  isBouncing.value = true;
+
+  setTimeout(() => {
+    window.open("http://127.0.0.1:8000/deal-customer/pdf", "_blank");
+    isBouncing.value = false;
+  }, 600);
 };
 
 const showHotelModal = ref(false);
@@ -1282,14 +1239,21 @@ const previewFiles = computed(() => {
       </div>
     </transition>
 
-    <h2
-      class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
-    >
-      Deal Customer
-    </h2>
-    <p class="text-md mb-6 text-slate-600">
-      See all deal customer, and summary report
-    </p>
+    <div class="flex items-start gap-3 mb-6">
+      <img
+        :src="note"
+        alt="New Customer"
+        class="w-18 h-18 object-contain shrink-0"
+      />
+      <div>
+        <h2 class="text-xl font-bold text-black tracking-tight">
+          Deal Customer
+        </h2>
+        <p class="text-md text-slate-600">
+          See all deal, new customer, new chat, and summary report
+        </p>
+      </div>
+    </div>
     <!-- Form deal customer -->
     <div
       v-if="isEditing"
@@ -2183,20 +2147,28 @@ const previewFiles = computed(() => {
           </div>
         </transition>
       </div>
-
-      <div class="lg:col-span-5 flex gap-2 justify-end">
+      <div class="lg:col-span-5 flex gap-3 justify-end mb-4">
+        <!-- DOWNLOAD PDF -->
         <button
           @click="downloadPdf"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
-          <Download class="w-4 h-4" />
+          <Download
+            class="w-4 h-4 transition-transform"
+            :class="{ 'bounce-animation': isBouncing }"
+          />
           Download PDF
         </button>
+
+        <!-- RESET -->
         <button
           @click="resetFilters"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
-          <RotateCcw class="w-4 h-4" />
+          <RotateCcw
+            class="w-4 h-4 transition-transform"
+            :class="{ 'rotate-animation': isRotating }"
+          />
           Reset
         </button>
       </div>
@@ -2376,18 +2348,23 @@ const previewFiles = computed(() => {
 
         <tbody>
           <!-- Loading -->
-          <tr v-if="loading">
-            <td colspan="31" class="p-4">
-              <div class="space-y-2">
-                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
-              </div>
+          <tr v-if="loading || isFiltering">
+            <td colspan="40" class="p-4 space-y-2">
+              <div
+                class="h-4 bg-gray-300 rounded-md w-full relative overflow-hidden shimmer"
+              ></div>
+              <div
+                class="h-4 bg-gray-300 rounded-md w-5/6 relative overflow-hidden shimmer"
+              ></div>
             </td>
           </tr>
 
           <!-- Tidak ada data -->
-          <tr v-else-if="!loading && paginatedDataCustomers.length === 0">
+          <tr
+            v-else-if="
+              !loading && !isFiltering && paginatedDataCustomers.length === 0
+            "
+          >
             <td
               colspan="31"
               class="text-center p-4 text-gray-800 font-semibold"
@@ -2942,5 +2919,65 @@ const previewFiles = computed(() => {
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    #1d4fd86a 0%,
+    rgba(156, 163, 175, 0.3) 50%,
+    #1d4fd86a 0%
+  );
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes bounceClick {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+  75% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes rotateClick {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.bounce-animation {
+  animation: bounceClick 0.6s ease-in-out;
+}
+
+.rotate-animation {
+  animation: rotateClick 0.6s ease-in-out;
 }
 </style>

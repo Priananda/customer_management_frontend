@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "lucide-vue-next";
 import LoadingSpinner from "../components/Loading.vue";
 import { ref, onMounted } from "vue";
 import { useAuthStore } from "../stores/auth";
+import BgAuth from "../assets/images/bg-auth.jpg";
 
 const auth = useAuthStore();
 
@@ -73,8 +74,11 @@ const login = async () => {
 
 <template>
   <div
-    class="container mx-auto flex items-center justify-center min-h-screen bg-black px-2"
+    class="relative container mx-auto flex items-center justify-center min-h-screen px-2 bg-cover bg-center bg-no-repeat"
+    :style="{ backgroundImage: `url(${BgAuth})` }"
   >
+    <!-- Overlay -->
+    <div class="absolute inset-0 bg-black/60"></div>
     <!-- Modal -->
     <transition name="modal-fade">
       <div
@@ -104,7 +108,7 @@ const login = async () => {
     </transition>
 
     <div
-      class="relative bg-slate-900/80 backdrop-blur-md rounded-2xl p-10 w-full max-w-md border border-cyan-700 shadow-[0_0_5px_#06b6d4]"
+      class="relative z-10 bg-slate-800/40 backdrop-blur-md rounded-2xl p-10 w-full max-w-md border border-cyan-700 shadow-[0_0_5px_#06b6d4]"
     >
       <h2 class="text-3xl font-semibold mb-4 text-center text-white">
         Login Super Admin

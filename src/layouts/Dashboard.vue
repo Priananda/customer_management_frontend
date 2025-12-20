@@ -18,7 +18,6 @@ const { logout } = useLogout();
 const collapsed = ref(true);
 const loading = ref(false);
 
-// Cek status sidebar di localStorage
 onMounted(() => {
   const saved = sessionStorage.getItem("sidebar-collapsed");
   collapsed.value = saved ? saved === "true" : true; // default tertutup
@@ -31,7 +30,6 @@ watch(collapsed, (val) => {
 
 <template>
   <div class="flex min-h-screen">
-    <!-- Sidebar -->
     <Sidebar
       v-if="user"
       :user="user"
@@ -42,7 +40,6 @@ watch(collapsed, (val) => {
       @loading-start="loading = true"
     />
 
-    <!-- Main content -->
     <div
       class="flex-1 flex flex-col transition-all duration-300"
       :class="collapsed ? 'ml-0' : 'ml-64'"
@@ -59,7 +56,6 @@ watch(collapsed, (val) => {
       </main>
     </div>
 
-    <!-- Loading spinner -->
     <LoadingSpinner v-if="loading" />
   </div>
 </template>

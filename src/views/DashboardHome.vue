@@ -12,9 +12,18 @@ import {
   Download,
 } from "lucide-vue-next";
 import TablePagination from "../components/TablePagination.vue";
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+} from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth";
+import checklistIcon from "@/assets/images/checklist2.png";
+import calendar from "@/assets/images/calendar.png";
 
 const authStore = useAuthStore();
 
@@ -25,7 +34,6 @@ if (authStore.accessToken) {
 }
 const role = authStore.role;
 
-// State
 const searchKeyword = ref("");
 const filterDate = ref("");
 const filterProgress = ref("all");
@@ -33,16 +41,11 @@ const selectedSegmen = ref("all");
 const newCustomers = ref([]);
 const showProgressDropdown = ref(false);
 const showSegmenDropdown = ref(false);
-
-// loading tabel
 const loading = ref(false);
-
-// Pagination
 const currentPage = ref(1);
 const pageSize = ref(10);
 const totalItems = ref(0);
 
-// Summary
 const summary = ref({
   total: 0,
   onProgress: 0,
@@ -73,18 +76,17 @@ const getSummary = async () => {
   }
 };
 
-// filtered
+const isFiltering = ref(false);
 const safe = (v) => (v ?? "").toString().toLowerCase();
 const filteredCustomers = computed(() => {
-  const keyword = safe(searchKeyword.value);
-
-  return newCustomers.value.filter((c) => {
+  isFiltering.value = true;
+  let result = newCustomers.value.filter((c) => {
+    const keyword = safe(searchKeyword.value);
     const deal = c.latest_deal || {};
     const transport = deal.transports?.[0] || {};
     const identity = deal.customer_identity || {};
 
     const matchesKeyword =
-      // ===== CUSTOMER =====
       safe(c.date).includes(keyword) ||
       safe(c.email).includes(keyword) ||
       safe(c.phone).includes(keyword) ||
@@ -100,7 +102,6 @@ const filteredCustomers = computed(() => {
       safe(c.check_out).includes(keyword) ||
       safe(c.hotel).includes(keyword) ||
       safe(c.notes).includes(keyword) ||
-      // ===== DEAL =====
       safe(deal.handler).includes(keyword) ||
       safe(deal.link_drive).includes(keyword) ||
       safe(deal.total_pax).includes(keyword) ||
@@ -108,20 +109,19 @@ const filteredCustomers = computed(() => {
       safe(deal.note_resto).includes(keyword) ||
       safe(deal.note_hotel).includes(keyword) ||
       safe(deal.payment_status).includes(keyword) ||
-      // ===== TRANSPORT =====
       safe(transport.guide).includes(keyword) ||
       safe(transport.hp_guide).includes(keyword) ||
       safe(transport.driver).includes(keyword) ||
       safe(transport.hp_driver).includes(keyword) ||
       safe(transport.note_operation).includes(keyword) ||
       safe(transport.report).includes(keyword) ||
-      // ===== CUSTOMER IDENTITY =====
       safe(identity.id_customer).includes(keyword) ||
       safe(identity.tanggal_lahir).includes(keyword);
 
-    // ===== FILTER LAIN =====
     const matchesDate = filterDate.value
-      ? [c.check_in, c.check_out].map(onlyDate).includes(filterDate.value)
+      ? [c.date, c.check_in, c.check_out, identity.tanggal_lahir].some(
+          (d) => onlyDate(d) === filterDate.value
+        )
       : true;
 
     const matchesProgress =
@@ -136,9 +136,24 @@ const filteredCustomers = computed(() => {
 
     return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
   });
+
+  nextTick(() => {
+    setTimeout(() => {
+      isFiltering.value = false;
+    }, 700);
+  });
+
+  return result;
 });
 
-// Paginated filtered data
+const onlyDate = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+};
+
 const paginatedDataCustomers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
@@ -146,12 +161,10 @@ const paginatedDataCustomers = computed(() => {
   return filteredCustomers.value.slice(start, end);
 });
 
-// Watch filters/search supaya reset halaman
 watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
   currentPage.value = 1;
 });
 
-// Unique Segmen
 const uniqueSegmens = computed(() => {
   const seg = new Set();
   newCustomers.value.forEach((c) => {
@@ -160,7 +173,6 @@ const uniqueSegmens = computed(() => {
   return [...seg];
 });
 
-// Reset Filters
 const resetFilters = () => {
   searchKeyword.value = "";
   filterDate.value = "";
@@ -168,7 +180,6 @@ const resetFilters = () => {
   selectedSegmen.value = "all";
 };
 
-// Dropdown & badge helpers
 function handleClickOutside(e) {
   const progress = document.getElementById("progress-dropdown");
   const segmen = document.getElementById("segmen-dropdown");
@@ -191,10 +202,9 @@ const progressColor = (progress) => {
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
 
-// Current date
 const currentDate = computed(() => {
   const today = new Date();
-  return today.toLocaleDateString("id-ID", {
+  return today.toLocaleDateString("en-US", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -202,7 +212,6 @@ const currentDate = computed(() => {
   });
 });
 
-// On mounted
 onMounted(() => {
   if (["admin", "super_admin", "pic", "staff"].includes(role)) {
     getNewCustomers();
@@ -214,6 +223,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 
+const isBouncing = ref(false);
 const downloadTodayPdf = async () => {
   try {
     const res = await api.get("/new-customer/report/today", {
@@ -234,6 +244,16 @@ const downloadTodayPdf = async () => {
   }
 };
 
+const handleDownloadClick = async () => {
+  isBouncing.value = true;
+
+  setTimeout(() => {
+    isBouncing.value = false;
+  }, 600);
+
+  await downloadTodayPdf();
+};
+
 const socialMediaUrl = (username) => {
   if (!username) return "#";
   const clean = username.replace("@", "").trim();
@@ -243,7 +263,6 @@ const socialMediaUrl = (username) => {
 const showHotelModal = ref(false);
 const selectedHotels = ref([]);
 
-// split hotel string → array
 const parseHotels = (hotelString) => {
   if (!hotelString) return [];
 
@@ -264,19 +283,35 @@ const closeHotelModal = () => {
 
 <template>
   <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
-    <h2
-      class="text-2xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
-    >
-      Overview
-    </h2>
-    <p class="text-md mb-6 text-slate-600">
-      See all deal, new customer, new chat, and summary report
-    </p>
+    <div class="flex items-center gap-4 mb-8">
+      <img
+        :src="checklistIcon"
+        alt="Overview illustration"
+        class="w-28 h-28 object-contain"
+      />
 
-    <div class="mb-6">
-      <p class="text-xl font-semibold mb-1 text-slate-800">{{ currentDate }}</p>
-      <p class="text-md text-slate-600">Daily performance overview</p>
+      <div>
+        <h2 class="text-2xl font-bold text-black tracking-tight">Overview</h2>
+        <p class="text-md text-slate-600">
+          See all deal, new customer, new chat, and summary report
+        </p>
+      </div>
     </div>
+
+    <div class="flex items-center gap-3 mb-6">
+      <img
+        :src="calendar"
+        alt="Calendar"
+        class="w-20 h-20 object-contain shrink-0"
+      />
+      <div>
+        <p class="text-xl font-semibold text-black">
+          {{ currentDate }}
+        </p>
+        <p class="text-md text-slate-600">Daily performance overview</p>
+      </div>
+    </div>
+
     <!-- Summary -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
       <!-- Total Customers -->
@@ -323,11 +358,14 @@ const closeHotelModal = () => {
       <div
         class="bg-white text-slate-700 p-5 rounded-2xl shadow-lg flex flex-col items-center justify-center gap-3 hover:shadow-xl transition"
       >
-        <Download class="w-6 h-6 text-blue-700" />
+        <Download
+          class="w-6 h-6 text-blue-700 transition-transform"
+          :class="{ 'jump-animation': isBouncing }"
+        />
         <p class="font-medium text-sm sm:text-base">Today's Report</p>
         <button
           class="bg-linear-to-br from-indigo-700 to-blue-700 text-white font-normal text-md px-4 py-2 rounded-lg shadow hover:from-indigo-600 hover:to-blue-600 transition"
-          @click="downloadTodayPdf"
+          @click="handleDownloadClick"
         >
           Download PDF
         </button>
@@ -649,17 +687,22 @@ const closeHotelModal = () => {
         </thead>
 
         <tbody>
-          <tr v-if="loading">
-            <td colspan="15" class="p-4">
-              <div class="space-y-2">
-                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
-              </div>
+          <tr v-if="loading || isFiltering">
+            <td colspan="30" class="p-4 space-y-2">
+              <div
+                class="h-4 bg-gray-300 rounded-md w-full relative overflow-hidden shimmer"
+              ></div>
+              <div
+                class="h-4 bg-gray-300 rounded-md w-5/6 relative overflow-hidden shimmer"
+              ></div>
             </td>
           </tr>
 
-          <tr v-else-if="!loading && filteredCustomers.length === 0">
+          <tr
+            v-else-if="
+              !loading && !isFiltering && filteredCustomers.length === 0
+            "
+          >
             <td
               colspan="15"
               class="text-center p-4 text-gray-800 font-semibold"
@@ -669,6 +712,7 @@ const closeHotelModal = () => {
           </tr>
 
           <tr
+            v-if="!loading && !isFiltering"
             v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
@@ -955,5 +999,54 @@ const closeHotelModal = () => {
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.shimmer {
+  position: relative;
+  background-color: #e2e8f0;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    #1d4fd86a 0%,
+    rgba(156, 163, 175, 0.3) 50%,
+    #1d4fd86a 0%
+  );
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes animIconDowlaoad {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+  75% {
+    transform: translateY(-6px);
+  }
+}
+
+.jump-animation {
+  animation: animIconDowlaoad 0.6s ease-in-out;
 }
 </style>

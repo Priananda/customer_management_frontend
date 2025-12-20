@@ -27,7 +27,7 @@ function nextPage() {
 <template>
   <div class="flex items-center justify-center mt-6 text-sm gap-3">
     <button
-      class="px-3 py-1 rounded shadow bg-blue-900 text-white disabled:bg-blue-300"
+      class="px-3 py-1 rounded shadow bg-blue-800 text-white disabled:bg-blue-300"
       :disabled="props.currentPage === 1"
       @click="prevPage"
     >
@@ -37,7 +37,7 @@ function nextPage() {
       Page {{ props.currentPage }} of {{ totalPages }}
     </span>
     <button
-      class="px-3 py-1 rounded shadow bg-blue-900 text-white disabled:bg-blue-300"
+      class="px-3 py-1 rounded shadow bg-blue-800 text-white disabled:bg-blue-300"
       :disabled="props.currentPage === totalPages"
       @click="nextPage"
     >

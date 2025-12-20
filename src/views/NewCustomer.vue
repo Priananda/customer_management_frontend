@@ -13,6 +13,8 @@ import {
 import FilePreviewModal from "../components/FilePreviewModal.vue";
 import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
+import note from "@/assets/images/note.png";
+
 import {
   ref,
   computed,
@@ -20,6 +22,7 @@ import {
   onBeforeUnmount,
   watch,
   watchEffect,
+  nextTick,
 } from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth.js";
@@ -27,13 +30,11 @@ import { useAuthStore } from "../stores/auth.js";
 const authStore = useAuthStore();
 const picName = computed(() => authStore.user?.name || "");
 
-// DEBUG
 watchEffect(() => {
   console.log("authStore.user =", authStore.user);
   console.log("PIC name =", picName.value);
 });
 
-// Set token di axios
 if (authStore.accessToken) {
   api.defaults.headers.common[
     "Authorization"
@@ -164,7 +165,7 @@ const submitForm = async () => {
 
     let res;
     if (editId.value) {
-      formData.append("_method", "PUT"); // ini penting
+      formData.append("_method", "PUT");
       res = await api.post(
         `/new-customer/${editId.value}/update-with-files`,
         formData,
@@ -210,10 +211,12 @@ const confirmDelete = async () => {
   }
 };
 
-const filteredCustomers = computed(() => {
-  return newCustomers.value.filter((c) => {
-    const keyword = (searchKeyword.value || "").toLowerCase();
+const isFiltering = ref(false);
 
+const filteredCustomers = computed(() => {
+  const keyword = (searchKeyword.value || "").toLowerCase();
+
+  return newCustomers.value.filter((c) => {
     const matchesKeyword =
       (c.date || "").toLowerCase().includes(keyword) ||
       (c.phone || "").toLowerCase().includes(keyword) ||
@@ -226,8 +229,8 @@ const filteredCustomers = computed(() => {
       (c.country || "").toLowerCase().includes(keyword) ||
       (c.social_media_id || "").toLowerCase().includes(keyword) ||
       (c.tour_packages || "").toLowerCase().includes(keyword) ||
-      formatDate(c.check_in).includes(keyword) || // <-- pakai formatDate
-      formatDate(c.check_out).includes(keyword) || // <-- pakai formatDate
+      formatDate(c.check_in).includes(keyword) ||
+      formatDate(c.check_out).includes(keyword) ||
       (c.hotel || "").toLowerCase().includes(keyword) ||
       (c.notes || "").toLowerCase().includes(keyword);
 
@@ -241,6 +244,7 @@ const filteredCustomers = computed(() => {
       filterProgress.value && filterProgress.value !== "all"
         ? c.progress === filterProgress.value
         : true;
+
     const matchesSegmen =
       selectedSegmen.value && selectedSegmen.value !== "all"
         ? (c.segmen || "").toLowerCase() === selectedSegmen.value.toLowerCase()
@@ -250,9 +254,17 @@ const filteredCustomers = computed(() => {
   });
 });
 
+watch([searchKeyword, filterDate, filterProgress, selectedSegmen], async () => {
+  isFiltering.value = true;
+  await nextTick();
+  setTimeout(() => {
+    isFiltering.value = false;
+  }, 700);
+});
+
 const formatDate = (date) => {
   if (!date) return "";
-  if (typeof date === "string") return date; // asumsikan sudah "YYYY-MM-DD"
+  if (typeof date === "string") return date;
   const d = new Date(date);
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -287,7 +299,6 @@ const openCreateModal = () => {
   showModal.value = true;
 };
 
-// TERMASUK FITUR UPLOAD
 const openEditModal = (customer) => {
   editId.value = customer.id;
 
@@ -307,7 +318,7 @@ const openEditModal = (customer) => {
 const fetchCustomerFiles = async (customerId) => {
   try {
     const res = await api.get(`/customer-files/${customerId}`);
-    existingFiles.value = res.data.files; // backend sudah kasih preview_url
+    existingFiles.value = res.data.files;
   } catch (err) {
     console.error("Error fetching customer files:", err);
     existingFiles.value = [];
@@ -322,7 +333,6 @@ function formatRole(role) {
     .join(" ");
 }
 
-// RESET FORM + UPLOAD
 const resetForm = () => {
   Object.keys(form.value).forEach((k) => {
     if (k === "hotel") {
@@ -335,7 +345,7 @@ const resetForm = () => {
   selectedFiles.value = [];
   existingFiles.value = [];
 };
-// RESET FORM + UPLOAD
+
 const closeModal = () => {
   showModal.value = false;
   showPreviewModal.value = false;
@@ -395,12 +405,17 @@ onBeforeUnmount(() => {
 
 const progressOptions = ["on progress", "deal", "canceled"];
 
-// Reset all filter
+const isRotating = ref(false);
 function resetFilters() {
+  isRotating.value = true;
   searchKeyword.value = "";
   filterDate.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
+
+  setTimeout(() => {
+    isRotating.value = false;
+  }, 600);
 }
 
 const paginatedDataCustomers = computed(() => {
@@ -430,9 +445,9 @@ const showHotelModal = ref(false);
 const selectedHotels = ref([]);
 const openHotelModal = (hotelStr) => {
   if (hotelStr.includes(",")) {
-    selectedHotels.value = hotelStr.split(","); // lebih dari 1 hotel
+    selectedHotels.value = hotelStr.split(",");
   } else {
-    selectedHotels.value = [hotelStr]; // satu hotel tetap dibuat array
+    selectedHotels.value = [hotelStr];
   }
   showHotelModal.value = true;
 };
@@ -568,31 +583,44 @@ const openFilePreview = async (customerId) => {
 };
 
 // DOWLOAD PDF
+const isBouncing = ref(false);
 const downloadPdfAll = () => {
-  window.open("http://127.0.0.1:8000/customers/pdf-all", "_blank");
+  isBouncing.value = true;
+
+  setTimeout(() => {
+    window.open("http://127.0.0.1:8000/customers/pdf-all", "_blank");
+    setTimeout(() => {
+      isBouncing.value = false;
+    }, 600);
+  }, 200);
 };
 
 const instagramUrl = (val) => {
   if (!val) return "#";
 
-  // jika sudah URL
   if (val.startsWith("http")) return val;
 
-  // @username → instagram.com/username
   return `https://www.instagram.com/${val.replace("@", "")}`;
 };
 </script>
 
 <template>
   <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
-    <h2
-      class="text-xl font-bold mb-2 text-slate-800 tracking-tight flex items-center gap-2"
-    >
-      New Customer
-    </h2>
-    <p class="text-md mb-6 text-slate-600">
-      See all deal, new customer, new chat, and summary report
-    </p>
+    <div class="flex items-start gap-3 mb-6">
+      <img
+        :src="note"
+        alt="New Customer"
+        class="w-18 h-18 object-contain shrink-0"
+      />
+      <div>
+        <h2 class="text-xl font-bold text-black tracking-tight">
+          New Customer
+        </h2>
+        <p class="text-md text-slate-600">
+          See all deal, new customer, new chat, and summary report
+        </p>
+      </div>
+    </div>
 
     <!-- Filter -->
     <div
@@ -723,7 +751,10 @@ const instagramUrl = (val) => {
           @click="downloadPdfAll"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
-          <Download class="w-4 h-4" />
+          <Download
+            class="w-4 h-4 transition-transform"
+            :class="{ 'bounce-animation': isBouncing }"
+          />
           Download PDF
         </button>
 
@@ -732,7 +763,10 @@ const instagramUrl = (val) => {
           @click="resetFilters"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
         >
-          <RotateCcw class="w-4 h-4" />
+          <RotateCcw
+            class="w-4 h-4 transition-transform"
+            :class="{ 'rotate-animation': isRotating }"
+          />
           Reset
         </button>
       </div>
@@ -844,16 +878,22 @@ const instagramUrl = (val) => {
         </thead>
 
         <tbody>
-          <tr v-if="loading">
-            <td colspan="18" class="p-4">
-              <div class="space-y-2">
-                <div class="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-full animate-pulse"></div>
-                <div class="h-4 bg-gray-300 rounded w-5/6 animate-pulse"></div>
-              </div>
+          <tr v-if="loading || isFiltering">
+            <td colspan="30" class="p-4 space-y-2">
+              <div
+                class="h-4 bg-gray-300 rounded-md w-full relative overflow-hidden shimmer"
+              ></div>
+              <div
+                class="h-4 bg-gray-300 rounded-md w-5/6 relative overflow-hidden shimmer"
+              ></div>
             </td>
           </tr>
-          <tr v-else-if="!loading && filteredCustomers.length === 0">
+
+          <tr
+            v-else-if="
+              !loading && !isFiltering && filteredCustomers.length === 0
+            "
+          >
             <td
               colspan="15"
               class="text-center p-4 text-gray-800 font-semibold"
@@ -862,13 +902,10 @@ const instagramUrl = (val) => {
             </td>
           </tr>
           <tr
+            v-if="!loading && !isFiltering"
             v-for="(c, i) in paginatedDataCustomers"
             :key="c.id"
-            :class="{
-              'bg-blue-50': selectedCustomer?.id === c.id,
-              'cursor-pointer': true,
-              'border-b border-slate-200 hover:bg-blue-50 transition-colors': true,
-            }"
+            class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
             <td class="px-4 py-3 align-middle text-left whitespace-nowrap">
               <div class="flex items-center gap-2">
@@ -1300,7 +1337,7 @@ const instagramUrl = (val) => {
                 </div>
 
                 <!-- Modal -->
-                <!-- Modal -->
+
                 <transition name="modal-zoom" appear>
                   <div
                     v-if="showCountryModal"
@@ -1745,5 +1782,65 @@ const instagramUrl = (val) => {
 .modal-zoom-leave-from {
   transform: scale(1);
   opacity: 1;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    #1d4fd86a 0%,
+    rgba(156, 163, 175, 0.3) 50%,
+    #1d4fd86a 0%
+  );
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes bounceClick {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+  75% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes rotateClick {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.bounce-animation {
+  animation: bounceClick 0.6s ease-in-out;
+}
+
+.rotate-animation {
+  animation: rotateClick 0.6s ease-in-out;
 }
 </style>
