@@ -12,8 +12,8 @@ const emit = defineEmits(["close"]);
 const API_URL = api.defaults.baseURL;
 
 const close = () => emit("close");
+
 const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
-const isPDF = (url) => /\.pdf$/i.test(url);
 </script>
 
 <template>
@@ -33,6 +33,7 @@ const isPDF = (url) => /\.pdf$/i.test(url);
       <div
         class="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-md overflow-hidden"
       >
+        <!-- HEADER -->
         <div class="px-8 py-6 flex items-center justify-between">
           <h2 class="text-lg font-semibold text-slate-900">
             All Files
@@ -49,9 +50,11 @@ const isPDF = (url) => /\.pdf$/i.test(url);
           </button>
         </div>
 
+        <!-- CONTENT -->
         <div
           class="px-8 pb-8 overflow-auto overflow-y-auto hidden-scroll max-h-[calc(90vh-96px)]"
         >
+          <!-- EMPTY STATE -->
           <div
             v-if="!files || files.length === 0"
             class="flex flex-col items-center justify-center py-24 text-slate-400"
@@ -60,6 +63,7 @@ const isPDF = (url) => /\.pdf$/i.test(url);
             <p class="text-sm">Tidak ada file yang tersedia</p>
           </div>
 
+          <!-- FILE GRID -->
           <div
             v-else
             class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
@@ -69,29 +73,33 @@ const isPDF = (url) => /\.pdf$/i.test(url);
               :key="file.id"
               class="bg-slate-50 rounded-2xl p-4 hover:bg-white hover:shadow-md transition flex flex-col"
             >
-              <!-- PREVIEW -->
-              <div
-                class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center"
+              <!-- PREVIEW CARD: KLIK LANGSUNG OPEN FILE DI TAB BARU -->
+              <a
+                :href="file.preview_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer"
               >
+                <!-- IMAGE -->
                 <img
                   v-if="isImage(file.preview_url)"
                   :src="file.preview_url"
                   class="w-full h-full object-cover"
                 />
 
-                <iframe
-                  v-else-if="isPDF(file.preview_url)"
-                  :src="file.preview_url"
-                  class="w-full h-full"
-                ></iframe>
-
+                <!-- GENERIC FILE ICON UNTUK PDF/WORD/EXCEL/LAINNYA -->
                 <div
                   v-else
-                  class="flex flex-col items-center text-slate-400 px-2"
+                  class="flex flex-col items-center justify-center text-slate-400 px-2"
                 >
-                  <div class="text-4xl">📄</div>
+                  <div class="text-4xl mb-1">📄</div>
+                  <p class="text-xs text-center break-all">
+                    {{ file.original_name }}
+                  </p>
                 </div>
-              </div>
+              </a>
+
+              <!-- FILE NAME -->
               <p
                 class="mt-3 text-xs text-slate-600 truncate"
                 :title="file.original_name"
@@ -99,9 +107,11 @@ const isPDF = (url) => /\.pdf$/i.test(url);
                 {{ file.original_name }}
               </p>
 
-              <!-- DOWNLOAD -->
+              <!-- DOWNLOAD BUTTON -->
               <a
                 :href="`${API_URL}/download-file/${file.id}`"
+                target="_blank"
+                rel="noopener noreferrer"
                 class="mt-3 inline-flex items-center justify-center gap-2 text-sm font-medium bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white py-2.5 rounded-lg transition"
               >
                 <Download class="w-4 h-4" />

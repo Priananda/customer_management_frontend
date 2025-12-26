@@ -54,6 +54,7 @@ const summary = ref({
   onProgress: 0,
   deal: 0,
   canceled: 0,
+  waiting: 0,
   todayCount: 0,
 });
 
@@ -144,9 +145,17 @@ const getSummary = async () => {
 };
 
 // TERMASUK FITUR UPLOAD
+const progressError = ref("");
 const submitForm = async () => {
   if (loadingModal.value) return;
   loadingModal.value = true;
+  progressError.value = "";
+
+  if (!form.value.progress) {
+    progressError.value = "Harap isikan progress terlebih dahulu";
+    loadingModal.value = false;
+    return;
+  }
 
   try {
     const formData = new FormData();
@@ -235,9 +244,20 @@ const filteredCustomers = computed(() => {
       (c.notes || "").toLowerCase().includes(keyword);
 
     const matchesDate = filterDate.value
-      ? formatDate(c.date) === filterDate.value ||
-        formatDate(c.check_in) === filterDate.value ||
-        formatDate(c.check_out) === filterDate.value
+      ? (() => {
+          const filter = filterDate.value;
+          const checkIn = formatDate(c.check_in);
+          const checkOut = formatDate(c.check_out);
+
+          if (checkIn && checkOut) {
+            return filter >= checkIn && filter <= checkOut;
+          }
+          return [
+            formatDate(c.date),
+            formatDate(c.check_in),
+            formatDate(c.check_out),
+          ].includes(filter);
+        })()
       : true;
 
     const matchesProgress =
@@ -286,15 +306,26 @@ const progressColor = (progress) => {
     return "bg-green-100 text-green-800 border border-green-200";
   if (p === "on progress")
     return "bg-blue-100 text-blue-800 border border-blue-200";
+  if (p === "waiting")
+    return "bg-yellow-100 text-yellow-800 border border-yellow-200";
   if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
+
+// const openCreateModal = () => {
+//   resetForm();
+//   editId.value = null;
+
+//   form.value.pic = formatRole(authStore.user?.role);
+
+//   showModal.value = true;
+// };
 
 const openCreateModal = () => {
   resetForm();
   editId.value = null;
 
-  form.value.pic = formatRole(authStore.user?.role);
+  form.value.pic = authStore.user?.name; // gunakan nama user login
 
   showModal.value = true;
 };
@@ -310,7 +341,7 @@ const openEditModal = (customer) => {
     ? customer.hotel.split(",").map((h) => h.trim())
     : [""];
 
-  form.value.pic = formatRole(authStore.user?.role);
+  // form.value.pic = formatRole(authStore.user?.role);
 
   fetchCustomerFiles(customer.id);
   showModal.value = true;
@@ -403,7 +434,29 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 
-const progressOptions = ["on progress", "deal", "canceled"];
+// const progressOptions = ["on progress", "deal", "canceled", "waiting"];
+const progressOptions = [
+  {
+    label: "on progress",
+    value: "on progress",
+    color: "bg-blue-100 text-blue-800 border border-blue-200",
+  },
+  {
+    label: "deal",
+    value: "deal",
+    color: "bg-green-100 text-green-800 border border-green-200",
+  },
+  {
+    label: "waiting",
+    value: "waiting",
+    color: "bg-yellow-100 text-yellow-800 border border-yellow-200",
+  },
+  {
+    label: "canceled",
+    value: "canceled",
+    color: "bg-red-100 text-red-800 border border-red-200",
+  },
+];
 
 const isRotating = ref(false);
 function resetFilters() {
@@ -565,20 +618,28 @@ const removeExistingFile = async (fileId) => {
 };
 // BUKA MODAL PREVIEW LOCAL KE DOMAIN
 const openFilePreview = async (customerId) => {
+  existingFiles.value = [];
+
+  if (!customerId) {
+    showPreviewModal.value = true;
+    return;
+  }
   try {
     const response = await api.get(`/customer-files/${customerId}`);
-
-    console.log("API response:", response.data);
-
-    existingFiles.value = response.data.files.map((f) => ({
-      id: f.id,
-      original_name: f.original_name,
-      preview_url: `http://127.0.0.1:8000${f.preview_url}`,
-    }));
-
-    showPreviewModal.value = true;
+    existingFiles.value = Array.isArray(response.data.files)
+      ? response.data.files.map((f) => ({
+          id: f.id,
+          original_name: f.original_name,
+          preview_url: f.preview_url.startsWith("http")
+            ? f.preview_url
+            : `http://127.0.0.1:8000${f.preview_url}`,
+        }))
+      : [];
   } catch (err) {
     console.error("Error get files:", err);
+    existingFiles.value = [];
+  } finally {
+    showPreviewModal.value = true;
   }
 };
 
@@ -669,29 +730,40 @@ const instagramUrl = (val) => {
             v-if="showProgressDropdown"
             class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
+            <!-- ALL -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress('all')"
             >
-              All Progress
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-slate-100 text-slate-700 border-slate-200"
+              >
+                All Progress
+              </span>
             </div>
+
+            <!-- PROGRESS LIST -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-              @click="selectProgress('on progress')"
+              v-for="prog in ['on progress', 'deal', 'waiting', 'canceled']"
+              :key="prog"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
+              @click="selectProgress(prog)"
             >
-              On Progress
-            </div>
-            <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-              @click="selectProgress('deal')"
-            >
-              Deal
-            </div>
-            <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-              @click="selectProgress('canceled')"
-            >
-              Canceled
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border capitalize"
+                :class="[
+                  prog === 'on progress' &&
+                    'bg-blue-100 text-blue-800 border-blue-200',
+                  prog === 'deal' &&
+                    'bg-green-100 text-green-800 border-green-200',
+                  prog === 'waiting' &&
+                    'bg-yellow-100 text-yellow-800 border-yellow-200',
+                  prog === 'canceled' &&
+                    'bg-red-100 text-red-800 border-red-200',
+                ]"
+              >
+                {{ prog }}
+              </span>
             </div>
           </div>
         </transition>
@@ -928,7 +1000,11 @@ const instagramUrl = (val) => {
                 </button>
               </div>
             </td>
-            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
+            <!-- <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td> -->
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ (currentPage - 1) * pageSize + i + 1 }}
+            </td>
+
             <td>
               <button
                 @click="openFilePreview(c.id)"
@@ -1145,10 +1221,20 @@ const instagramUrl = (val) => {
         <div
           class="relative bg-white rounded-xl w-full max-w-3xl mx-4 shadow-xl overflow-hidden"
         >
+          <div class="mt-4 px-7">
+            <p
+              v-if="progressError"
+              class="inline-block bg-red-100 text-red-700 border border-red-300 text-sm px-4 py-1 rounded-full transition-all duration-300 ease-out opacity-100 translate-y-0"
+            >
+              {{ progressError }}
+            </p>
+          </div>
+
           <div
             class="sticky top-0 bg-white px-6 py-4 flex items-center justify-between z-10"
           >
-            <h3 class="text-lg font-semibold">
+            <h3 class="text-lg font-semibold flex items-center">
+              <img :src="note" alt="note icon" class="w-10 h-10 mr-2" />
               {{ editId ? "Edit Customer" : "Create Customer" }}
             </h3>
 
@@ -1260,11 +1346,19 @@ const instagramUrl = (val) => {
                     >
                       <li
                         v-for="option in progressOptions"
-                        :key="option"
-                        @click="selectModalProgress(option)"
-                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700"
+                        :key="option.value"
+                        @click="selectModalProgress(option.value)"
+                        class="px-4 py-2 cursor-pointer flex items-center gap-2 hover:bg-blue-50"
                       >
-                        {{ option }}
+                        <!-- Badge -->
+                        <span
+                          :class="[
+                            'w-[130px] px-2 py-1 text-xs text-center rounded-full font-medium border',
+                            option.color,
+                          ]"
+                        >
+                          {{ option.label }}
+                        </span>
                       </li>
                     </ul>
                   </div>
@@ -1625,13 +1719,13 @@ const instagramUrl = (val) => {
                         :key="file.id"
                         class="flex items-center justify-between gap-2 p-2 border border-slate-300 rounded-md bg-slate-100"
                       >
-                        <a
+                        <div
                           :href="file.preview_url"
                           target="_blank"
                           class="text-xs truncate flex-1 text-slate-700"
                         >
                           {{ file.original_name }}
-                        </a>
+                        </div>
 
                         <button
                           type="button"

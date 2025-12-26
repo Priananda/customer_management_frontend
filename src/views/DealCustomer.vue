@@ -102,7 +102,28 @@ const dealForm = ref({
 });
 
 const showProgress = ref(false);
-const progressOptions = ["on progress", "canceled", "deal"];
+const progressOptions = [
+  {
+    label: "on progress",
+    value: "on progress",
+    color: "bg-blue-100 text-blue-800 border border-blue-200",
+  },
+  {
+    label: "deal",
+    value: "deal",
+    color: "bg-green-100 text-green-800 border border-green-200",
+  },
+  {
+    label: "waiting",
+    value: "waiting",
+    color: "bg-yellow-100 text-yellow-800 border border-yellow-200",
+  },
+  {
+    label: "canceled",
+    value: "canceled",
+    color: "bg-red-100 text-red-800 border border-red-200",
+  },
+];
 
 const showCountryDropdown = ref(false);
 
@@ -199,16 +220,18 @@ const deletedDealCustomerIds = ref(
 const loadData = async () => {
   loading.value = true;
   try {
+    // Ambil data dari API
     const [ncRes, dcRes] = await Promise.all([
       api.get("/new-customer"),
       api.get("/deal-customer"),
     ]);
 
+    // Simpan hasil GET ke state
     newCustomers.value = ncRes.data?.data || [];
     deals.value = dcRes.data?.data || [];
-
     deletedDealCustomerIds.value = dcRes.data?.deleted_new_customer_ids || [];
 
+    // Gabungkan data new_customer dan deal_customer
     combinedData.value = newCustomers.value
       .filter((nc) => nc.progress?.toLowerCase() === "deal")
       .map((nc) => {
@@ -301,7 +324,112 @@ const removeExistingTransportFile = (trIndex, fIndex, file) => {
   }
 };
 
+// const handleSave = async () => {
+//   // === VALIDASI: pastikan ada new_customer_id ===
+//   if (!dealForm.value.new_customer_id) {
+//     alertType.value = "error";
+//     alertMessage.value = "Pilih customer terlebih dahulu.";
+//     showAlert.value = true;
+//     setTimeout(() => (showAlert.value = false), 3000);
+//     return;
+//   }
+
+//   isLoading.value = true;
+//   const fd = new FormData();
+
+//   // ==========================
+//   // 1. NEW CUSTOMER UPDATE
+//   // ==========================
+//   if (editFormNewCustomer.value) {
+//     Object.keys(editFormNewCustomer.value).forEach((key) => {
+//       let val = editFormNewCustomer.value[key];
+
+//       // convert hotel array jadi string
+//       if (key === "hotel" && Array.isArray(val)) val = val.join(",");
+
+//       if (val !== null && val !== undefined && typeof val !== "object") {
+//         fd.append(`new_customer[${key}]`, String(val));
+//       }
+//     });
+//   }
+
+//   fd.append("new_customer_id", dealForm.value.new_customer_id);
+
+//   // ==========================
+//   // 2. DATA DEAL CUSTOMER
+//   // ==========================
+//   Object.keys(dealForm.value).forEach((key) => {
+//     const val = dealForm.value[key];
+//     if (key === "transport") return; // handle transport terpisah
+//     if (key === "payment_status" && !val) return;
+//     if (val !== null && val !== undefined) fd.append(key, String(val));
+//   });
+
+//   // ==========================
+//   // 3. TRANSPORT + FILE
+//   // ==========================
+//   dealForm.value.transport.forEach((tr, i) => {
+//     fd.append(`transport[${i}][id]`, tr.id ?? "");
+//     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
+//     fd.append(`transport[${i}][hp_guide]`, tr.hp_guide ?? "");
+//     fd.append(`transport[${i}][driver]`, tr.driver ?? "");
+//     fd.append(`transport[${i}][hp_driver]`, tr.hp_driver ?? "");
+//     fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
+//     fd.append(`transport[${i}][report]`, tr.report ?? "");
+
+//     // foto existing
+//     (tr.foto_existing || []).forEach((old) => {
+//       fd.append(`transport[${i}][foto_existing][]`, old.file_name);
+//     });
+
+//     // foto baru
+//     (tr.foto || []).forEach((file) => {
+//       fd.append(`transport[${i}][foto][]`, file);
+//     });
+//   });
+
+//   // ==========================
+//   // 4. FILE DEAL CUSTOMER TAMBAHAN
+//   // ==========================
+//   dealSelectedFiles.value.forEach((file) => {
+//     fd.append("files[]", file);
+//   });
+
+//   try {
+//     let res;
+//     if (!dealForm.value.id) {
+//       // CREATE
+//       res = await api.post("/deal-customer", fd, {
+//         headers: { "Content-Type": "multipart/form-data" },
+//       });
+//     } else {
+//       // UPDATE
+//       res = await api.post(
+//         `/deal-customer/${dealForm.value.id}?_method=PUT`,
+//         fd,
+//         { headers: { "Content-Type": "multipart/form-data" } }
+//       );
+//     }
+
+//     // Bersihkan file yang sudah di-upload
+//     dealSelectedFiles.value = [];
+
+//     // Reload preview file dari backend
+//     await loadFiles(res.data.data.id, dealForm.value.new_customer_id);
+
+//     isEditing.value = false;
+//     console.log("response:", res.data);
+//   } catch (error) {
+//     console.error("error:", error?.response?.data || error);
+//     alert("Gagal menyimpan deal customer");
+//   } finally {
+//     isLoading.value = false;
+//     reset();
+//   }
+// };
+
 const handleSave = async () => {
+  //  VALIDASI: pastikan ada new_customer_id
   if (!dealForm.value.new_customer_id) {
     alertType.value = "error";
     alertMessage.value = "Pilih customer terlebih dahulu.";
@@ -310,31 +438,16 @@ const handleSave = async () => {
     return;
   }
 
-  const fd = new FormData();
   isLoading.value = true;
+  const fd = new FormData();
 
-  // ==========================
   // 1. NEW CUSTOMER UPDATE
-  // ==========================
-  // Tambahkan ini di handleSave()
-  // if (editFormNewCustomer.value) {
-  //   Object.keys(editFormNewCustomer.value).forEach((key) => {
-  //     const val = editFormNewCustomer.value[key];
-
-  //     // pastikan val bukan object
-  //     if (val !== null && val !== undefined && typeof val !== "object") {
-  //       fd.append(`new_customer[${key}]`, String(val));
-  //     }
-  //   });
-  // }
   if (editFormNewCustomer.value) {
     Object.keys(editFormNewCustomer.value).forEach((key) => {
       let val = editFormNewCustomer.value[key];
 
-      // Convert hotel (array) menjadi string
-      if (key === "hotel" && Array.isArray(val)) {
-        val = val.join(",");
-      }
+      // convert hotel array jadi string
+      if (key === "hotel" && Array.isArray(val)) val = val.join(",");
 
       if (val !== null && val !== undefined && typeof val !== "object") {
         fd.append(`new_customer[${key}]`, String(val));
@@ -344,20 +457,15 @@ const handleSave = async () => {
 
   fd.append("new_customer_id", dealForm.value.new_customer_id);
 
+  // 2. DATA DEAL CUSTOMER
   Object.keys(dealForm.value).forEach((key) => {
     const val = dealForm.value[key];
-    if (key === "transport") return;
+    if (key === "transport") return; // handle transport terpisah
     if (key === "payment_status" && !val) return;
-    if (val !== null && val !== undefined) {
-      fd.append(key, String(val));
-    }
+    if (val !== null && val !== undefined) fd.append(key, String(val));
   });
 
-  console.log("=== FormData Entries ===");
-  for (let pair of fd.entries()) {
-    console.log(pair[0], pair[1]);
-  }
-
+  // 3. TRANSPORT + FILE
   dealForm.value.transport.forEach((tr, i) => {
     fd.append(`transport[${i}][id]`, tr.id ?? "");
     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
@@ -367,70 +475,160 @@ const handleSave = async () => {
     fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
     fd.append(`transport[${i}][report]`, tr.report ?? "");
 
+    // foto existing
     (tr.foto_existing || []).forEach((old) => {
       fd.append(`transport[${i}][foto_existing][]`, old.file_name);
     });
 
-    tr.foto.forEach((file) => {
+    // foto baru
+    (tr.foto || []).forEach((file) => {
       fd.append(`transport[${i}][foto][]`, file);
     });
   });
 
+  // 4. FILE DEAL CUSTOMER TAMBAHAN
   dealSelectedFiles.value.forEach((file) => {
     fd.append("files[]", file);
   });
 
-  console.log("selectedCustomer.value:", selectedCustomer.value);
-  console.log("dealForm.value:", dealForm.value);
-
   try {
     let res;
     if (!dealForm.value.id) {
+      // CREATE
       res = await api.post("/deal-customer", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
     } else {
+      // UPDATE
       res = await api.post(
         `/deal-customer/${dealForm.value.id}?_method=PUT`,
         fd,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
     }
 
+    dealSelectedFiles.value = [];
+
+    const files = await loadFiles(
+      res.data.data.id,
+      dealForm.value.new_customer_id
+    );
+
+    await loadData();
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+
+    // Langsung update preview modal
+    modalFiles.value = files;
+    showFileModal.value = false;
+
     isEditing.value = false;
     console.log("response:", res.data);
-    await loadData();
   } catch (error) {
     console.error("error:", error?.response?.data || error);
+    alert("Gagal menyimpan deal customer");
   } finally {
     isLoading.value = false;
     reset();
   }
 };
 
+// const confirmDelete = async () => {
+//   try {
+//     if (deleteType.value === "deal") {
+//       await api.delete(`/deal-customer/${selectedId.value}`);
+
+//       const row = combinedData.value.find(
+//         (r) => r.deal_customer?.id === selectedId.value
+//       );
+//       if (row?.new_customer?.id) {
+//         deletedDealCustomerIds.value.push(row.new_customer.id);
+//         localStorage.setItem(
+//           "deletedDealCustomerIds",
+//           JSON.stringify(deletedDealCustomerIds.value)
+//         );
+//       }
+//     } else {
+//       await api.delete(`/new-customer/${selectedId.value}`);
+//     }
+
+//     await loadData();
+//     showDeleteModal.value = false;
+//   } catch (error) {
+//     console.error("confirmDelete error:", error);
+//     alert("Gagal menghapus data.");
+//   }
+// };
+
 const confirmDelete = async () => {
   try {
-    if (deleteType.value === "deal") {
-      await api.delete(`/deal-customer/${selectedId.value}`);
+    let row;
 
-      const row = combinedData.value.find(
-        (r) => r.deal_customer?.id === selectedId.value
-      );
-      if (row?.new_customer?.id) {
-        deletedDealCustomerIds.value.push(row.new_customer.id);
-        localStorage.setItem(
-          "deletedDealCustomerIds",
-          JSON.stringify(deletedDealCustomerIds.value)
+    // Cek sebelum melakukan delete
+    console.log("Delete type:", deleteType.value);
+    console.log("Selected ID:", selectedId.value);
+    console.log("combinedData before delete:", combinedData.value);
+
+    // Hapus data di backend
+    if (deleteType.value === "deal") {
+      // Hapus deal di backend
+      const response = await api.delete(`/deal-customer/${selectedId.value}`);
+
+      // Cek response dari API
+      console.log("Response from deleting deal customer:", response);
+      if (response.status === 200) {
+        // Temukan row yang dihapus dan hapus data dari combinedData (frontend)
+        row = combinedData.value.find(
+          (r) => r.deal_customer?.id === selectedId.value
         );
+
+        console.log("Row to be deleted:", row);
+
+        if (row?.new_customer?.id) {
+          deletedDealCustomerIds.value.push(row.new_customer.id);
+          localStorage.setItem(
+            "deletedDealCustomerIds",
+            JSON.stringify(deletedDealCustomerIds.value)
+          );
+          console.log(
+            "Deleted Deal Customer IDs stored:",
+            deletedDealCustomerIds.value
+          );
+        }
+
+        // Hapus row dari combinedData
+        combinedData.value = combinedData.value.filter(
+          (r) => r.deal_customer?.id !== selectedId.value
+        );
+        console.log("combinedData after delete deal:", combinedData.value);
       }
     } else {
-      await api.delete(`/new-customer/${selectedId.value}`);
+      // Hapus new customer di backend
+      const response = await api.delete(`/new-customer/${selectedId.value}`);
+
+      // Cek response dari API
+      console.log("Response from deleting new customer:", response);
+      if (response.status === 200) {
+        // Hapus row dari combinedData
+        combinedData.value = combinedData.value.filter(
+          (r) => r.new_customer?.id !== selectedId.value
+        );
+        console.log(
+          "combinedData after delete new customer:",
+          combinedData.value
+        );
+      }
     }
 
-    await loadData();
+    // Update modal dan beri feedback ke user
     showDeleteModal.value = false;
+    console.log("Delete modal closed:", showDeleteModal.value);
+
+    // Opsional: hanya jika kamu butuh sinkronisasi data dengan backend setelah dihapus
+    await loadData();
+    console.log("Data reloaded from backend");
   } catch (error) {
     console.error("confirmDelete error:", error);
     alert("Gagal menghapus data.");
@@ -538,9 +736,19 @@ const filteredDeals = computed(() => {
 
     // 4. Filter lain: date, progress, segmen
     const matchesDate = dateFilter
-      ? formatDate(c.date) === dateFilter ||
-        formatDate(c.check_in) === dateFilter ||
-        formatDate(c.check_out) === dateFilter
+      ? (() => {
+          const filter = dateFilter; // YYYY-MM-DD
+          const checkIn = formatDate(c.check_in);
+          const checkOut = formatDate(c.check_out);
+
+          // Range check
+          if (checkIn && checkOut) {
+            return filter >= checkIn && filter <= checkOut;
+          }
+
+          // fallback untuk tanggal tunggal
+          return [formatDate(c.date)].includes(filter);
+        })()
       : true;
 
     const matchesProgress =
@@ -635,8 +843,14 @@ const progressColor = (status) => {
     case "FOLLOWUP":
       return "bg-yellow-200 text-yellow-800 border border-yellow-200";
 
+    case "WAITING":
+      return "bg-yellow-100 text-yellow-800 border border-yellow-200";
+
     case "PROSPECT":
       return "bg-blue-200 text-blue-800 border border-blue-200";
+
+    case "ON PROGRESS":
+      return "bg-blue-100 text-blue-800 border border-blue-200";
 
     case "DEAL":
       return "bg-green-100 text-green-800 border border-green-200";
@@ -644,9 +858,6 @@ const progressColor = (status) => {
     case "LOST":
     case "CANCELED":
       return "bg-red-100 text-red-800 border border-red-200";
-
-    case "ON PROGRESS":
-      return "bg-blue-100 text-blue-800 border border-blue-200";
 
     default:
       return "bg-slate-100 text-slate-600 border border-slate-200";
@@ -933,47 +1144,58 @@ const removeEditHotel = (index) => {
 // Saat memilih file baru
 const showDealAlert = ref(false);
 const dealAlertMessage = ref("");
-const handleDealFileChange = async (e) => {
+// const handleDealFileChange = async (e) => {
+//   const files = Array.from(e.target.files);
+//   if (!files.length) return;
+
+//   // pastikan deal sudah ada
+//   if (!dealForm.value.id) {
+//     dealAlertMessage.value =
+//       "Upload file deal customer gagal!, harap input data deal customer terlebih dahulu. Keluar";
+//     showDealAlert.value = true;
+
+//     setTimeout(() => {
+//       showDealAlert.value = false;
+//     }, 6000);
+
+//     return;
+//   }
+
+//   // tampilkan dulu di UI
+//   dealSelectedFiles.value.push(...files);
+
+//   const formData = new FormData();
+//   files.forEach((file) => formData.append("files[]", file));
+
+//   try {
+//     await api.post(
+//       `/deal-customer-files/upload/${dealForm.value.id}`,
+//       formData,
+//       { headers: { "Content-Type": "multipart/form-data" } }
+//     );
+
+//     // reload preview dari backend
+//     await loadFiles(dealForm.value.id, dealForm.value.new_customer_id);
+
+//     // kosongkan preview local
+//     dealSelectedFiles.value = [];
+//   } catch (err) {
+//     console.error("Upload gagal:", err);
+//     alert("Upload file gagal");
+//   }
+
+//   // reset input supaya file yang sama bisa dipilih lagi
+//   e.target.value = "";
+// };
+
+const handleDealFileChange = (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
 
-  // pastikan deal sudah ada
-  if (!dealForm.value.id) {
-    dealAlertMessage.value =
-      "Upload file deal customer gagal!, harap input data deal customer terlebih dahulu. Keluar";
-    showDealAlert.value = true;
-
-    setTimeout(() => {
-      showDealAlert.value = false;
-    }, 6000);
-
-    return;
-  }
-
-  // tampilkan dulu di UI
+  // Hanya simpan file ke array, jangan upload dulu
   dealSelectedFiles.value.push(...files);
 
-  const formData = new FormData();
-  files.forEach((file) => formData.append("files[]", file));
-
-  try {
-    await api.post(
-      `/deal-customer-files/upload/${dealForm.value.id}`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
-
-    // reload preview dari backend
-    await loadFiles(dealForm.value.id, dealForm.value.new_customer_id);
-
-    // kosongkan preview local
-    dealSelectedFiles.value = [];
-  } catch (err) {
-    console.error("Upload gagal:", err);
-    alert("Upload file gagal");
-  }
-
-  // reset input supaya file yang sama bisa dipilih lagi
+  // reset input supaya bisa upload file sama lagi
   e.target.value = "";
 };
 
@@ -997,77 +1219,30 @@ const removeDealSelectedFile = (index) => {
 // DOWLOAD + MODAL + GABUNG NEW & DEAL
 const showFileModal = ref(false);
 const modalFiles = ref([]);
-// tombol ditekan
-// const openFilePreview = async (dealId) => {
-//   try {
-//     const res = await api.get(`/deal-customer-files/${dealId}`);
-//     modalFiles.value = res.data.files.map((f) => ({
-//       ...f,
-//       preview_url: API_BASE + f.preview_url,
-//     }));
-//     showFileModal.value = true;
-//   } catch (err) {
-//     console.error(err);
-//   }
-// };
-// const openFilePreview = async (dealId) => {
-//   try {
-//     const res = await api.get(`/deal-customer-files/${dealId}`);
-
-//     console.log("Res data dari backend:", res.data.files); // 🔍 cek semua file
-
-//     modalFiles.value = res.data.files.map((f) => {
-//       console.log("File diproses:", f); // 🔍 cek setiap file satu per satu
-//       return {
-//         ...f,
-//         preview_url: f.preview_url, // jangan tambah API_BASE kalau backend sudah asset()
-//       };
-//     });
-
-//     console.log("Modal files:", modalFiles.value); // 🔍 cek array yang akan dipakai di template
-
-//     showFileModal.value = true;
-//   } catch (err) {
-//     console.error(err);
-//   }
-// };
 const openFilePreview = async (dealId) => {
   modalFiles.value = [];
-  showFileModal.value = true;
 
-  if (!dealId) return;
+  if (!dealId) {
+    showFileModal.value = true;
+    return;
+  }
 
   try {
     const res = await api.get(`/deal-customer-files/${dealId}`);
-    modalFiles.value = res.data.files || [];
+
+    modalFiles.value = Array.isArray(res?.data?.files) ? res.data.files : [];
+    showFileModal.value = true;
   } catch (err) {
     console.error("Gagal load file:", err);
     modalFiles.value = [];
+  } finally {
+    showFileModal.value = true;
   }
 };
 
 const closeFileModal = () => {
   showFileModal.value = false;
 };
-
-// const downloadFile = (file) => {
-//   const url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
-//   window.open(url, "_blank");
-// };
-
-// const downloadFile = (file) => {
-//   let url = "";
-
-//   if (file.source === "new_customer" || file.source === "deal_customer") {
-//     // pakai real_id untuk endpoint
-//     url = `http://127.0.0.1:8000/files/download/${file.source}/${file.real_id}`;
-//   } else if (file.source === "transport") {
-//     // pakai transport_id + file_name
-//     url = `http://127.0.0.1:8000/files/download/transport/${file.transport_id}/${file.file_name}`;
-//   }
-
-//   window.open(url, "_blank");
-// };
 
 const downloadFile = (file) => {
   let url = "";
@@ -1188,6 +1363,15 @@ const isImage = (filename = "") => {
 const previewFiles = computed(() => {
   return allFiles.value.filter((f) => f.source !== "transport");
 });
+
+import DealSummaryModal from "../components/DealSummaryModal.vue";
+const modalVisible = ref(false);
+const selectedDeal = ref({});
+
+const openModal = (deal) => {
+  selectedDeal.value = deal;
+  modalVisible.value = true;
+};
 </script>
 
 <template>
@@ -1342,14 +1526,22 @@ const previewFiles = computed(() => {
             >
               <li
                 v-for="option in progressOptions"
-                :key="option"
+                :key="option.value"
                 @click="
-                  editFormNewCustomer.progress = option;
+                  editFormNewCustomer.progress = option.value;
                   showProgress = false;
                 "
-                class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                class="px-4 py-2 cursor-pointer hover:bg-blue-50 flex items-center gap-2"
               >
-                {{ option }}
+                <!-- Badge dengan warna -->
+                <span
+                  :class="[
+                    'w-[130px] px-2 py-1 text-xs text-center rounded-full font-medium border',
+                    option.color,
+                  ]"
+                >
+                  {{ option.label }}
+                </span>
               </li>
             </ul>
           </div>
@@ -1649,19 +1841,20 @@ const previewFiles = computed(() => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
-        <!-- Handler -->
-        <div>
-          <label class="font-medium text-slate-700"> Handler </label>
-          <input
-            v-model="dealForm.handler"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-            placeholder="Handler"
-          />
-        </div>
+      <div class="">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px] mb-5">
+          <!-- Handler -->
+          <div>
+            <label class="font-medium text-slate-700"> Handler </label>
+            <input
+              v-model="dealForm.handler"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+              placeholder="Handler"
+            />
+          </div>
 
-        <!-- Link Drive -->
-        <!-- <div>
+          <!-- Link Drive -->
+          <!-- <div>
           <label class="font-medium text-slate-700">
             Link Drive <span class="text-red-500">*</span>
           </label>
@@ -1672,118 +1865,123 @@ const previewFiles = computed(() => {
           />
         </div> -->
 
-        <!-- Total Pax -->
-        <div>
-          <label class="font-medium text-slate-700"> Total Pax </label>
-          <input
-            v-model="dealForm.total_pax"
-            type="text"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-            placeholder="Total Pax"
-          />
-        </div>
-
-        <!-- Activity -->
-        <div>
-          <label class="font-medium text-slate-700"> Activity </label>
-          <input
-            v-model="dealForm.activity"
-            type="text"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-            placeholder="Activity"
-          />
-        </div>
-
-        <!-- Note Hotel -->
-        <div>
-          <label class="font-medium text-slate-700">Note Hotel</label>
-          <textarea
-            v-model="dealForm.note_hotel"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-            placeholder="Note Hotel"
-          ></textarea>
-        </div>
-
-        <!-- Note Resto -->
-        <div>
-          <label class="font-medium text-slate-700">Note Resto</label>
-          <textarea
-            v-model="dealForm.note_resto"
-            class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-            placeholder="Note Resto"
-          ></textarea>
-        </div>
-
-        <!-- Payment Status -->
-        <div class="relative w-full">
-          <label class="font-medium text-slate-700"> Payment Status </label>
-
-          <!-- Dropdown button -->
-          <button
-            @click="toggleDropdown"
-            class="w-full flex justify-between items-center border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-          >
-            <span>{{ dealForm.payment_status || "Pilih Payment Status" }}</span>
-            <component
-              :is="dropdownOpen ? ChevronRight : ChevronDown"
-              class="w-5 h-5 transition-transform duration-200"
+          <!-- Total Pax -->
+          <div>
+            <label class="font-medium text-slate-700"> Total Pax </label>
+            <input
+              v-model="dealForm.total_pax"
+              type="text"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+              placeholder="Total Pax"
             />
-          </button>
-
-          <!-- Dropdown options -->
-          <div
-            v-if="dropdownOpen"
-            class="absolute z-10 mt-1 w-full bg-white border-[1.5px] border-slate-200 rounded-lg shadow-lg"
-          >
-            <ul>
-              <li
-                v-for="option in options"
-                :key="option.value"
-                @click="selectOption(option.value)"
-                class="p-3 cursor-pointer hover:bg-slate-100"
-              >
-                {{ option.label }}
-              </li>
-            </ul>
           </div>
 
-          <!-- Modal -->
-          <transition
-            enter-active-class="transition ease-out duration-300"
-            enter-from-class="opacity-0 scale-50"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="transition ease-in duration-200"
-            leave-from-class="opacity-100 scale-100"
-            leave-to-class="opacity-0 scale-50"
-          >
-            <div
-              v-if="showModal"
-              class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-20"
-            >
-              <div class="bg-white rounded-lg p-6 w-96">
-                <h2 class="text-lg font-semibold mb-4">Modal Payment Status</h2>
-                <p class="mb-4">
-                  Anda memilih: <strong>{{ dealForm.payment_status }}</strong>
-                </p>
+          <!-- Activity -->
+          <div>
+            <label class="font-medium text-slate-700"> Activity </label>
+            <input
+              v-model="dealForm.activity"
+              type="text"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+              placeholder="Activity"
+            />
+          </div>
 
-                <!-- Tombol ke kanan -->
-                <div class="flex justify-end">
-                  <button
-                    @click="showModal = false"
-                    class="px-4 py-2 bg-slate-800 text-white rounded-lg"
-                  >
-                    Tutup
-                  </button>
+          <!-- Note Hotel -->
+          <div>
+            <label class="font-medium text-slate-700">Note Hotel</label>
+            <textarea
+              v-model="dealForm.note_hotel"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+              placeholder="Note Hotel"
+            ></textarea>
+          </div>
+
+          <!-- Note Resto -->
+          <div>
+            <label class="font-medium text-slate-700">Note Resto</label>
+            <textarea
+              v-model="dealForm.note_resto"
+              class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+              placeholder="Note Resto"
+            ></textarea>
+          </div>
+
+          <!-- Payment Status -->
+          <div class="relative w-full">
+            <label class="font-medium text-slate-700"> Payment Status </label>
+
+            <!-- Dropdown button -->
+            <button
+              @click="toggleDropdown"
+              class="w-full flex justify-between items-center border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+            >
+              <span>{{
+                dealForm.payment_status || "Pilih Payment Status"
+              }}</span>
+              <component
+                :is="dropdownOpen ? ChevronRight : ChevronDown"
+                class="w-5 h-5 transition-transform duration-200"
+              />
+            </button>
+
+            <!-- Dropdown options -->
+            <div
+              v-if="dropdownOpen"
+              class="absolute z-10 mt-1 w-full bg-white border-[1.5px] border-slate-200 rounded-lg shadow-lg"
+            >
+              <ul>
+                <li
+                  v-for="option in options"
+                  :key="option.value"
+                  @click="selectOption(option.value)"
+                  class="p-3 cursor-pointer hover:bg-slate-100"
+                >
+                  {{ option.label }}
+                </li>
+              </ul>
+            </div>
+
+            <!-- Modal -->
+            <transition
+              enter-active-class="transition ease-out duration-300"
+              enter-from-class="opacity-0 scale-50"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition ease-in duration-200"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-50"
+            >
+              <div
+                v-if="showModal"
+                class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-20"
+              >
+                <div class="bg-white rounded-lg p-6 w-96">
+                  <h2 class="text-lg font-semibold mb-4">
+                    Modal Payment Status
+                  </h2>
+                  <p class="mb-4">
+                    Anda memilih: <strong>{{ dealForm.payment_status }}</strong>
+                  </p>
+
+                  <!-- Tombol ke kanan -->
+                  <div class="flex justify-end">
+                    <button
+                      @click="showModal = false"
+                      class="px-4 py-2 bg-slate-800 text-white rounded-lg"
+                    >
+                      Tutup
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </transition>
+            </transition>
+          </div>
         </div>
 
         <!-- File Customer -->
         <div class="col-span-2">
           <h4 class="font-semibold mb-2 text-slate-700">
-            Preview File New Customer & Deal Customer
+            Preview File New Customer, Deal Customer & Transport
           </h4>
 
           <!-- Preview Files -->
@@ -1814,7 +2012,7 @@ const previewFiles = computed(() => {
           <!-- Upload File Deal Customer -->
           <div class="mt-4">
             <label class="font-medium text-slate-700 mb-1 block">
-              Upload File Deal Customer
+              Upload File Deal Customer + Transport
             </label>
             <input
               type="file"
@@ -1871,7 +2069,7 @@ const previewFiles = computed(() => {
             </div>
 
             <!-- GRID INPUT TRANSPORT -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-[15px]">
+            <div class="flex flex-col gap-5 text-[15px]">
               <div>
                 <label class="font-medium text-slate-700">Guide</label>
                 <input
@@ -1927,7 +2125,7 @@ const previewFiles = computed(() => {
               </div>
 
               <!-- Upload Foto Transport -->
-              <div class="col-span-2">
+              <!-- <div class="col-span-2">
                 <label class="font-medium text-slate-700"
                   >Upload Foto Transport</label
                 >
@@ -1938,24 +2136,24 @@ const previewFiles = computed(() => {
                   class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
                 />
 
-                <!-- Preview Files -->
-                <!-- PREVIEW FILE TRANSPORT -->
                 <div
                   class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3"
                 >
-                  <!-- FILE EXISTING (dari backend) -->
+                 
                   <div
                     v-for="(file, fIndex) in tr.foto_existing"
                     :key="'old-' + fIndex"
                     class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
                     @click="openPreviewExisting(file)"
                   >
-                    <!-- Tampilkan hanya nama file -->
-                    <span class="text-sm truncate block text-center">
+                   
+                    <span
+                      class="text-sm truncate max-w-[150px] block text-center"
+                    >
                       {{ file.original_name || file.file_name }}
                     </span>
 
-                    <!-- Tombol hapus -->
+                 
                     <button
                       type="button"
                       @click.stop="
@@ -1967,14 +2165,14 @@ const previewFiles = computed(() => {
                     </button>
                   </div>
 
-                  <!-- FILE BARU (belum disimpan) -->
+       
                   <div
                     v-for="(file, fIndex) in tr.foto"
                     :key="'new-' + fIndex"
                     class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
                     @click="openPreviewNew(file)"
                   >
-                    <!-- Tampilkan hanya nama file asli -->
+                    
                     <span class="text-sm truncate block text-center">
                       {{ file.name }}
                     </span>
@@ -1988,7 +2186,7 @@ const previewFiles = computed(() => {
                     </button>
                   </div>
                 </div>
-              </div>
+              </div> -->
             </div>
           </div>
 
@@ -2088,22 +2286,42 @@ const previewFiles = computed(() => {
         <transition name="dropdown">
           <div
             v-if="showProgressDropdown"
-            class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+            class="absolute z-50 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
+            <!-- ALL -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress('all')"
             >
-              All Progress
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-slate-100 text-slate-700 border-slate-200"
+              >
+                All Progress
+              </span>
             </div>
 
+            <!-- PROGRESS LIST -->
             <div
-              v-for="prog in ['on progress', 'deal', 'canceled']"
+              v-for="prog in ['on progress', 'deal', 'waiting', 'canceled']"
               :key="prog"
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer capitalize"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress(prog)"
             >
-              {{ prog }}
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border capitalize"
+                :class="[
+                  prog === 'on progress' &&
+                    'bg-blue-100 text-blue-800 border-blue-200',
+                  prog === 'deal' &&
+                    'bg-green-100 text-green-800 border-green-200',
+                  prog === 'waiting' &&
+                    'bg-yellow-100 text-yellow-800 border-yellow-200',
+                  prog === 'canceled' &&
+                    'bg-red-100 text-red-800 border-red-200',
+                ]"
+              >
+                {{ prog }}
+              </span>
             </div>
           </div>
         </transition>
@@ -2404,7 +2622,10 @@ const previewFiles = computed(() => {
               </div>
             </td>
 
-            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ (currentPage - 1) * pageSize + i + 1 }}
+            </td>
+
             <td class="px-4 py-2 whitespace-nowrap">
               <button
                 @click="openFilePreview(d.deal_customer?.id)"
@@ -2424,9 +2645,15 @@ const previewFiles = computed(() => {
             <td class="px-4 py-2 whitespace-nowrap">
               {{ d.new_customer?.email ?? "-" }}
             </td>
-            <td class="px-4 py-2 whitespace-nowrap">
-              {{ d.new_customer?.name ?? "-" }}
+            <td class="px-4 py-2">
+              <button
+                @click="openModal(d)"
+                class="relative rounded px-1 transition hover:bg-slate-100 hover:underline focus:outline-none"
+              >
+                {{ d.new_customer?.name ?? "-" }}
+              </button>
             </td>
+
             <td class="px-4 py-2 whitespace-nowrap">
               {{ d.new_customer?.check_in ?? "-" }}
             </td>
@@ -2763,7 +2990,7 @@ const previewFiles = computed(() => {
             <h2 class="text-lg font-semibold text-slate-900">
               All Files
               <span class="ml-2 text-sm text-slate-400">
-                ({{ modalFiles.length }})
+                ({{ modalFiles?.length || 0 }})
               </span>
             </h2>
 
@@ -2780,11 +3007,14 @@ const previewFiles = computed(() => {
           >
             <!-- EMPTY STATE -->
             <div
-              v-if="modalFiles.length === 0"
+              v-if="!modalFiles || modalFiles.length === 0"
               class="flex flex-col items-center justify-center py-24 text-slate-400"
             >
               <div class="text-6xl mb-4">📂</div>
-              <p class="text-sm">Tidak ada file yang tersedia</p>
+              <p class="text-sm">
+                Tidak ada file new customer, deal customer, transports &
+                customer identity yang tersedia
+              </p>
             </div>
 
             <!-- FILE GRID -->
@@ -2797,9 +3027,16 @@ const previewFiles = computed(() => {
                 :key="file.id"
                 class="bg-slate-50 rounded-2xl p-4 hover:bg-white hover:shadow-md transition flex flex-col"
               >
-                <!-- PREVIEW -->
-                <div
-                  class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center"
+                <!-- PREVIEW CARD: KLIK LANGSUNG OPEN FILE DI TAB BARU -->
+                <a
+                  :href="
+                    file.preview_url.startsWith('http')
+                      ? file.preview_url
+                      : API_BASE + file.preview_url
+                  "
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer"
                 >
                   <!-- IMAGE -->
                   <img
@@ -2817,37 +3054,24 @@ const previewFiles = computed(() => {
                     class="w-full h-full object-cover"
                   />
 
-                  <!-- PDF -->
-                  <iframe
-                    v-else-if="
-                      file.original_name.toLowerCase().endsWith('.pdf')
-                    "
-                    :src="
-                      file.preview_url.startsWith('http')
-                        ? file.preview_url
-                        : API_BASE + file.preview_url
-                    "
-                    class="w-full h-full"
-                  ></iframe>
-
-                  <!-- OTHER -->
+                  <!-- GENERIC FILE ICON UNTUK PDF/WORD/LAINNYA -->
                   <div
                     v-else
-                    class="flex flex-col items-center text-slate-400 px-2"
+                    class="flex flex-col items-center justify-center text-slate-400 px-2"
                   >
-                    <div class="text-4xl">📄</div>
-                    <p class="text-xs mt-2 text-center break-all">
+                    <div class="text-4xl mb-1">📄</div>
+                    <p class="text-xs text-center break-all">
                       {{ file.original_name }}
                     </p>
                   </div>
-                </div>
+                </a>
 
                 <!-- FILE NAME -->
                 <p class="mt-3 text-xs text-slate-600 truncate">
                   {{ file.original_name }}
                 </p>
 
-                <!-- ACTION -->
+                <!-- DOWNLOAD BUTTON -->
                 <button
                   @click="downloadFile(file)"
                   class="mt-4 inline-flex items-center justify-center gap-2 text-sm font-medium bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white py-2.5 rounded-lg transition"
@@ -2865,8 +3089,14 @@ const previewFiles = computed(() => {
     <!-- Modal delete -->
     <ConfirmModal
       :show="showDeleteModal"
-      title="Hapus Data"
-      message="Apakah Anda yakin ingin menghapus data ini?"
+      :title="
+        deleteType === 'deal' ? 'Hapus Deal Customer' : 'Hapus New Customer'
+      "
+      :message="
+        deleteType === 'deal'
+          ? 'Apakah Anda yakin ingin menghapus Deal Customer ini?'
+          : 'Apakah Anda yakin ingin menghapus New Customer ini?'
+      "
       cancelText="Tidak"
       confirmText="Ya"
       @cancel="showDeleteModal = false"
@@ -2879,6 +3109,12 @@ const previewFiles = computed(() => {
       :total-items="totalItems"
       :page-size="pageSize"
       @update:page="(page) => (currentPage = page)"
+    />
+
+    <DealSummaryModal
+      :show="modalVisible"
+      :deal="selectedDeal"
+      @close="modalVisible = false"
     />
 
     <TransportList :dealId="2" />

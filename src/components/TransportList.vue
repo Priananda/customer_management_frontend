@@ -133,7 +133,7 @@ const nextPage = () => {
         class="flex items-center gap-2 px-5 py-2 bg-indigo-700 text-white text-sm font-medium rounded-lg hover:bg-indigo-800 shadow-md transition"
       >
         <RotateCcw
-          class="w-5 h-5 transition-transform text-white"
+          class="w-4 h-4 transition-transform text-white"
           :class="{ 'rotate-animation': isRotating }"
         />
         Reset
@@ -144,7 +144,7 @@ const nextPage = () => {
         class="flex items-center gap-2 px-5 py-2 bg-blue-700 text-white text-sm font-medium rounded-lg hover:bg-blue-800 shadow-md transition"
       >
         <Eye
-          class="w-5 h-5 transition-opacity text-white"
+          class="w-4 h-4 transition-opacity text-white"
           :class="{ 'blink-animation': isBlinking }"
         />
         {{ isTableVisible ? "Hide" : "View" }}
@@ -179,7 +179,10 @@ const nextPage = () => {
             :key="tr.id"
             class="hover:bg-slate-50 transition"
           >
-            <td class="px-4 py-2">{{ index + 1 }}</td>
+            <td class="px-4 py-2">
+              {{ (currentPage - 1) * pageSize + index + 1 }}
+            </td>
+
             <td class="px-4 py-2">{{ tr.guide ?? "-" }}</td>
             <td class="px-4 py-2">{{ tr.driver ?? "-" }}</td>
             <td class="px-4 py-2">{{ tr.hp_guide ?? "-" }}</td>

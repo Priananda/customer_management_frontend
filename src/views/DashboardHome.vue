@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Download,
+  Clock,
 } from "lucide-vue-next";
 import TablePagination from "../components/TablePagination.vue";
 import {
@@ -51,6 +52,7 @@ const summary = ref({
   onProgress: 0,
   deal: 0,
   canceled: 0,
+  waiting: 0,
   todayCount: 0,
 });
 
@@ -59,7 +61,6 @@ const getNewCustomers = async () => {
   try {
     const res = await api.get("/new-customer");
     newCustomers.value = res.data.data;
-    totalItems.value = res.data.pagination.total;
   } catch (err) {
     console.error(err);
   } finally {
@@ -119,9 +120,19 @@ const filteredCustomers = computed(() => {
       safe(identity.tanggal_lahir).includes(keyword);
 
     const matchesDate = filterDate.value
-      ? [c.date, c.check_in, c.check_out, identity.tanggal_lahir].some(
-          (d) => onlyDate(d) === filterDate.value
-        )
+      ? (() => {
+          const filter = filterDate.value;
+
+          const checkIn = onlyDate(c.check_in);
+          const checkOut = onlyDate(c.check_out);
+
+          if (checkIn && checkOut) {
+            return filter >= checkIn && filter <= checkOut;
+          }
+          return [onlyDate(c.date), onlyDate(identity.tanggal_lahir)].includes(
+            filter
+          );
+        })()
       : true;
 
     const matchesProgress =
@@ -160,6 +171,23 @@ const paginatedDataCustomers = computed(() => {
   totalItems.value = filteredCustomers.value.length; // update totalItems sesuai filter
   return filteredCustomers.value.slice(start, end);
 });
+// Total halaman berdasarkan filteredCustomers
+const totalPages = computed(() =>
+  Math.max(Math.ceil(filteredCustomers.value.length / pageSize.value), 1)
+);
+
+// Fungsi prev/next
+function prevPage() {
+  if (currentPage.value > 1) {
+    currentPage.value--;
+  }
+}
+
+function nextPage() {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++;
+  }
+}
 
 watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
   currentPage.value = 1;
@@ -173,11 +201,16 @@ const uniqueSegmens = computed(() => {
   return [...seg];
 });
 
+const isRotating = ref(false);
 const resetFilters = () => {
+  isRotating.value = true;
   searchKeyword.value = "";
   filterDate.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
+  setTimeout(() => {
+    isRotating.value = false;
+  }, 600);
 };
 
 function handleClickOutside(e) {
@@ -192,12 +225,15 @@ function closeAllDropdowns() {
   showProgressDropdown.value = false;
   showSegmenDropdown.value = false;
 }
+
 const progressColor = (progress) => {
   const p = (progress || "").toLowerCase();
   if (p === "deal")
     return "bg-green-100 text-green-800 border border-green-200";
   if (p === "on progress")
     return "bg-blue-100 text-blue-800 border border-blue-200";
+  if (p === "waiting")
+    return "bg-yellow-100 text-yellow-800 border border-yellow-200";
   if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
@@ -279,11 +315,23 @@ const closeHotelModal = () => {
   showHotelModal.value = false;
   selectedHotels.value = [];
 };
+
+const tableSection = ref(null);
+const filterBySummary = async (status) => {
+  filterProgress.value = status;
+  currentPage.value = 1;
+  await nextTick();
+
+  tableSection.value?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+};
 </script>
 
 <template>
   <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
-    <div class="flex items-center gap-4 mb-8">
+    <div class="-mt-5 flex items-center gap-4 mb-8">
       <img
         :src="checklistIcon"
         alt="Overview illustration"
@@ -298,7 +346,7 @@ const closeHotelModal = () => {
       </div>
     </div>
 
-    <div class="flex items-center gap-3 mb-6">
+    <div class="-mt-5 flex items-center gap-3 mb-6">
       <img
         :src="calendar"
         alt="Calendar"
@@ -313,7 +361,7 @@ const closeHotelModal = () => {
     </div>
 
     <!-- Summary -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <!-- Total Customers -->
       <div
         class="bg-linear-to-br from-indigo-700 to-blue-700 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
@@ -326,7 +374,8 @@ const closeHotelModal = () => {
 
       <!-- On Progress -->
       <div
-        class="bg-linear-to-br from-yellow-500/90 to-yellow-500/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
+        @click="filterBySummary('on progress')"
+        class="bg-linear-to-br from-indigo-500/90 to-blue-500/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
       >
         <Loader class="w-6 h-6 text-white mb-1 e" />
         <p class="font-medium text-md">On Progress</p>
@@ -335,18 +384,31 @@ const closeHotelModal = () => {
       </div>
 
       <!-- Deal -->
-      <div
-        class="bg-linear-to-br from-green-500/90 to-green-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
+      <RouterLink
+        to="/dashboard/deal-customer"
+        class="bg-linear-to-br from-green-500/90 to-green-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
       >
         <CheckCircle2 class="w-6 h-6 text-white mb-1" />
         <p class="font-medium text-md">Deal</p>
         <h3 class="text-2xl font-bold">{{ summary.deal }}</h3>
         <p class="text-sm">Closed successfully</p>
+      </RouterLink>
+
+      <!-- Waiting -->
+      <div
+        @click="filterBySummary('waiting')"
+        class="bg-linear-to-br from-yellow-400/90 to-amber-500/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+      >
+        <Clock class="w-6 h-6 text-white mb-1" />
+        <p class="font-medium text-md">Waiting</p>
+        <h3 class="text-2xl font-bold">{{ summary.waiting }}</h3>
+        <p class="text-sm">Awaiting response</p>
       </div>
 
       <!-- Canceled -->
       <div
-        class="bg-linear-to-br from-red-500/90 to-red-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2"
+        @click="filterBySummary('canceled')"
+        class="bg-linear-to-br from-red-500/90 to-red-600/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
       >
         <XCircle class="w-6 h-6 text-white mb-1" />
         <p class="font-medium text-md">Canceled</p>
@@ -356,7 +418,7 @@ const closeHotelModal = () => {
 
       <!-- Download -->
       <div
-        class="bg-white text-slate-700 p-5 rounded-2xl shadow-lg flex flex-col items-center justify-center gap-3 hover:shadow-xl transition"
+        class="bg-white text-slate-700 p-5 rounded-2xl shadow-lg flex flex-col items-center justify-center gap-3 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
       >
         <Download
           class="w-6 h-6 text-blue-700 transition-transform"
@@ -423,41 +485,79 @@ const closeHotelModal = () => {
             v-if="showProgressDropdown"
             class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
+            <!-- ALL -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="
                 filterProgress = 'all';
                 showProgressDropdown = false;
               "
             >
-              All Progress
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-slate-100 text-slate-700 border-slate-200"
+              >
+                All Progress
+              </span>
             </div>
+
+            <!-- ON PROGRESS -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
                 filterProgress = 'on progress';
                 showProgressDropdown = false;
               "
             >
-              On Progress
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-blue-100 text-blue-800 border-blue-200"
+              >
+                On Progress
+              </span>
             </div>
+
+            <!-- DEAL -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
                 filterProgress = 'deal';
                 showProgressDropdown = false;
               "
             >
-              Deal
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-green-100 text-green-800 border-green-200"
+              >
+                Deal
+              </span>
             </div>
+
+            <!-- WAITING -->
             <div
-              class="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
+              @click="
+                filterProgress = 'waiting';
+                showProgressDropdown = false;
+              "
+            >
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-yellow-100 text-yellow-800 border-yellow-200"
+              >
+                Waiting
+              </span>
+            </div>
+
+            <!-- CANCELED -->
+            <div
+              class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
                 filterProgress = 'canceled';
                 showProgressDropdown = false;
               "
             >
-              Canceled
+              <span
+                class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-red-100 text-red-800 border-red-200"
+              >
+                Canceled
+              </span>
             </div>
           </div>
         </transition>
@@ -516,7 +616,10 @@ const closeHotelModal = () => {
         @click="resetFilters"
         class="cursor-pointer flex items-center justify-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition"
       >
-        <RotateCcw class="w-4 h-4" />
+        <RotateCcw
+          class="w-4 h-4 transition-transform"
+          :class="{ 'rotate-animation': isRotating }"
+        />
         Reset
       </button>
     </div>
@@ -525,7 +628,10 @@ const closeHotelModal = () => {
     <div
       class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
     >
-      <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
+      <table
+        ref="tableSection"
+        class="min-w-full bg-white rounded-lg text-sm table-fixed"
+      >
         <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
           <tr>
             <th class="px-4 py-3 text-left">No</th>
@@ -718,7 +824,9 @@ const closeHotelModal = () => {
             class="border-b border-slate-200 hover:bg-blue-50 transition-colors"
           >
             <!-- No -->
-            <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              {{ (currentPage - 1) * pageSize + i + 1 }}
+            </td>
 
             <!-- Date -->
             <td class="px-4 py-3 whitespace-nowrap">{{ c.date ?? "-" }}</td>
@@ -761,7 +869,9 @@ const closeHotelModal = () => {
             </td>
 
             <!-- PIC -->
-            <td class="px-4 py-3 whitespace-nowrap">{{ c.pic ?? "-" }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {{ c.pic ?? "-" }}
+            </td>
 
             <!-- Segmen -->
             <td class="px-4 py-3 whitespace-nowrap">{{ c.segmen ?? "-" }}</td>
@@ -970,12 +1080,31 @@ const closeHotelModal = () => {
       </table>
     </div>
     <!-- Pagination -->
-    <TablePagination
+    <!-- <TablePagination
       :current-page="currentPage"
-      :total-items="totalItems"
+      :total-items="totalItemsFiltered"
       :page-size="pageSize"
       @update:page="(page) => (currentPage = page)"
-    />
+    /> -->
+    <div class="flex items-center justify-center mt-6 text-sm gap-3">
+      <button
+        class="px-3 py-1 rounded shadow bg-blue-800 text-white disabled:bg-blue-300"
+        :disabled="currentPage <= 1"
+        @click="prevPage"
+      >
+        Prev
+      </button>
+      <span class="text-gray-700"
+        >Page {{ currentPage }} of {{ totalPages }}</span
+      >
+      <button
+        class="px-3 py-1 rounded shadow bg-blue-800 text-white disabled:bg-blue-300"
+        :disabled="currentPage >= totalPages"
+        @click="nextPage"
+      >
+        Next
+      </button>
+    </div>
   </div>
 </template>
 
@@ -1048,5 +1177,20 @@ const closeHotelModal = () => {
 
 .jump-animation {
   animation: animIconDowlaoad 0.6s ease-in-out;
+}
+.rotate-animation {
+  animation: rotateClick 0.6s ease-in-out;
+}
+
+@keyframes rotateClick {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>

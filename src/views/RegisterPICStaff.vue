@@ -4,6 +4,7 @@ import api from "../api/api";
 import { useRouter } from "vue-router";
 import LoadingSpinner from "../components/Loading.vue";
 import { Eye, EyeOff, ChevronDown } from "lucide-vue-next";
+import BgAuth from "../assets/images/bg-auth.jpg";
 
 const router = useRouter();
 
@@ -74,7 +75,12 @@ const register = async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-black px-2">
+  <div
+    class="relative container mx-auto flex items-center justify-center min-h-screen px-2 bg-cover bg-center bg-no-repeat"
+    :style="{ backgroundImage: `url(${BgAuth})` }"
+  >
+    <!-- Overlay -->
+    <div class="absolute inset-0 bg-black/60"></div>
     <!-- Modal -->
     <transition name="modal-fade">
       <div
@@ -103,7 +109,7 @@ const register = async () => {
     </transition>
 
     <div
-      class="relative bg-slate-900/80 backdrop-blur-md rounded-2xl p-8 w-full max-w-md border border-cyan-700 shadow-[0_0_5px_#06b6d4]"
+      class="relative z-10 bg-slate-800/40 backdrop-blur-md rounded-2xl p-8 w-full max-w-md border border-cyan-700 shadow-[0_0_5px_#06b6d4]"
     >
       <h2 class="text-3xl font-semibold mb-4 text-center text-white">
         Register PIC / Staff
@@ -218,6 +224,15 @@ const register = async () => {
         </RouterLink>
       </div>
     </div>
+
+    <a
+      href="https://www.freepik.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="fixed bottom-3 right-4 z-20 text-[10px] text-white/60 hover:text-white transition"
+    >
+      Background designed by Freepik
+    </a>
   </div>
 
   <LoadingSpinner v-if="loading" />

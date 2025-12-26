@@ -186,6 +186,14 @@ const login = async () => {
         </RouterLink>
       </div>
     </div>
+    <a
+      href="https://www.freepik.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="fixed bottom-3 right-4 z-20 text-[10px] text-white/60 hover:text-white transition"
+    >
+      Background designed by Freepik
+    </a>
   </div>
 
   <LoadingSpinner v-if="loading" />

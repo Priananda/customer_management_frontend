@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import api from "../api/api";
 import PersonalData2 from "@/assets/images/personal-data2.png";
-
+import ConfirmModal from "../components/ConfirmModalDelete.vue";
+import { useBirthdayStore } from "@/stores/birthday";
 import {
   ChevronDown,
   ChevronRight,
@@ -14,6 +15,9 @@ import {
 
 const BACKEND_URL = "http://127.0.0.1:8000";
 
+const showDeleteModal = ref(false);
+const deleteLoading = ref(false);
+const deleteTargetId = ref(null);
 const showForm = ref(false);
 const showCustomerModal = ref(false);
 const isLoading = ref(false);
@@ -36,12 +40,22 @@ const form = ref({
 
 const isEditMode = computed(() => !!form.value.id);
 
+// const loadDeals = async () => {
+//   const res = await api.get("/deal-customer");
+//   const raw = res.data?.data || [];
+
+//   deals.value = raw.filter((d) => d.new_customer);
+
+//   if (!selectedDeal.value && deals.value.length === 1) {
+//     selectedDeal.value = deals.value[0];
+//   }
+// };
 const loadDeals = async () => {
-  const res = await api.get("/deal-customer");
-  const raw = res.data?.data || [];
+  const res = await api.get("/new-customer");
 
-  deals.value = raw.filter((d) => d.new_customer);
+  deals.value = res.data?.data || [];
 
+  // auto select kalau cuma 1
   if (!selectedDeal.value && deals.value.length === 1) {
     selectedDeal.value = deals.value[0];
   }
@@ -81,35 +95,72 @@ const removeExistingFile = (index) => {
   form.value.files.splice(index, 1);
 };
 
+const isSubmitting = ref(false);
+// const handleSubmit = async () => {
+//   const payload = new FormData();
+
+//   payload.append("deal_customer_id", selectedDeal.value.id);
+//   payload.append("id_customer", form.value.id_customer);
+
+//   payload.append("tanggal_lahir", form.value.tanggal_lahir);
+
+//   payload.append("keep_files", JSON.stringify(form.value.files));
+
+//   newFiles.value.forEach((f) => payload.append("files[]", f));
+
+//   if (isEditMode.value) {
+//     await api.post(`/customer-identities/${form.value.id}`, payload);
+//   } else {
+//     await api.post("/customer-identities", payload);
+//   }
+
+//   resetForm();
+//   showForm.value = false;
+//   loadIdentities();
+// };
 const handleSubmit = async () => {
-  const payload = new FormData();
-  payload.append("deal_customer_id", selectedDeal.value.id);
-  payload.append("id_customer", form.value.id_customer);
-  payload.append("tanggal_lahir", form.value.tanggal_lahir);
-  payload.append("keep_files", JSON.stringify(form.value.files));
+  if (isSubmitting.value) return;
 
-  newFiles.value.forEach((f) => payload.append("files[]", f));
+  isSubmitting.value = true;
 
-  if (isEditMode.value) {
-    await api.post(`/customer-identities/${form.value.id}`, payload);
-  } else {
-    await api.post("/customer-identities", payload);
+  await nextTick();
+
+  try {
+    const payload = new FormData();
+
+    payload.append("new_customer_id", selectedDeal.value.id);
+
+    payload.append("id_customer", form.value.id_customer);
+    payload.append("tanggal_lahir", form.value.tanggal_lahir);
+    payload.append("keep_files", JSON.stringify(form.value.files));
+
+    newFiles.value.forEach((f) => payload.append("files[]", f));
+
+    if (isEditMode.value) {
+      await api.post(`/customer-identities/${form.value.id}`, payload);
+    } else {
+      await api.post("/customer-identities", payload);
+    }
+
+    resetForm();
+    showForm.value = false;
+    loadIdentities();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    isSubmitting.value = false;
   }
-
-  resetForm();
-  showForm.value = false;
-  loadIdentities();
 };
 
 const editItem = (item) => {
   form.value = {
     id: item.id,
-    id_customer: item.id_customer,
-    tanggal_lahir: item.tanggal_lahir,
+    id_customer: normalizeFormValue(item.id_customer),
+    tanggal_lahir: normalizeFormValue(item.tanggal_lahir),
     files: [...(item.files || [])],
   };
 
-  selectedDeal.value = deals.value.find((d) => d.id === item.deal_customer_id);
+  selectedDeal.value = item.deal_customer?.new_customer || null;
 
   newFiles.value = [];
   showForm.value = true;
@@ -121,10 +172,9 @@ const cancelEdit = () => {
   showForm.value = false;
 };
 
-const deleteItem = async (id) => {
-  if (!confirm("Hapus data ini?")) return;
-  await api.delete(`/customer-identities/${id}`);
-  loadIdentities();
+const deleteItem = (id) => {
+  deleteTargetId.value = id;
+  showDeleteModal.value = true;
 };
 
 const resetForm = () => {
@@ -142,9 +192,10 @@ const resetSearch = () => {
   currentPage.value = 1;
 };
 
-onMounted(() => {
-  loadDeals();
-  loadIdentities();
+watch(showForm, async (val) => {
+  if (val) {
+    await loadDeals();
+  }
 });
 
 watch(search, () => {
@@ -166,6 +217,43 @@ const resetSearchWithAnimation = () => {
   }, 600);
   resetSearch();
 };
+
+const displayValue = (val) => {
+  return val && val !== "null" ? val : "-";
+};
+const normalizeFormValue = (val) => {
+  return val && val !== "null" ? val : "";
+};
+
+const confirmDelete = async () => {
+  if (!deleteTargetId.value) return;
+
+  deleteLoading.value = true;
+
+  try {
+    await api.delete(`/customer-identities/${deleteTargetId.value}`);
+    await loadIdentities();
+    showDeleteModal.value = false;
+  } catch (e) {
+    console.error(e);
+  } finally {
+    deleteLoading.value = false;
+    deleteTargetId.value = null;
+  }
+};
+
+const cancelDelete = () => {
+  showDeleteModal.value = false;
+  deleteTargetId.value = null;
+};
+
+const birthdayStore = useBirthdayStore();
+
+onMounted(() => {
+  loadDeals();
+  loadIdentities();
+  birthdayStore.fetchToday();
+});
 </script>
 
 <template>
@@ -210,11 +298,7 @@ const resetSearchWithAnimation = () => {
             class="mt-2 w-full flex items-center justify-between p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
           >
             <span class="text-sm text-gray-800 truncate">
-              {{
-                selectedDeal
-                  ? selectedDeal.new_customer.name
-                  : "Select Customer"
-              }}
+              {{ selectedDeal ? selectedDeal.name : "Select Customer" }}
             </span>
             <ChevronDown
               class="w-4 h-4 text-gray-500 transition-transform"
@@ -230,7 +314,7 @@ const resetSearchWithAnimation = () => {
           <input
             v-model="form.id_customer"
             class="mt-2 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-            placeholder="Enter ID number"
+            placeholder="Enter Passport/Ktp"
           />
         </div>
 
@@ -295,15 +379,48 @@ const resetSearchWithAnimation = () => {
       <div class="flex gap-3 pt-4 border-t border-gray-200">
         <button
           @click="handleSubmit"
-          class="px-6 py-2 rounded-lg bg-indigo-700 text-white font-medium hover:bg-indigo-800 transition"
+          :disabled="isSubmitting"
+          class="px-6 py-2 rounded-lg bg-indigo-700 text-white font-medium hover:bg-indigo-800 transition flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {{ isEditMode ? "Update" : "Save" }}
+          <svg
+            v-if="isSubmitting"
+            class="w-4 h-4 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+            />
+          </svg>
+
+          <span>
+            {{
+              isEditMode
+                ? isSubmitting
+                  ? "Updating..."
+                  : "Update"
+                : isSubmitting
+                ? "Saving..."
+                : "Save"
+            }}
+          </span>
         </button>
 
         <button
           v-if="isEditMode"
           @click="cancelEdit"
-          class="px-6 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
+          :disabled="isSubmitting"
+          class="px-6 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
         >
           Cancel
         </button>
@@ -324,7 +441,7 @@ const resetSearchWithAnimation = () => {
         class="flex items-center gap-2 px-6 py-2 font-medium rounded-lg bg-gray-200 hover:bg-gray-300 transition"
       >
         <RotateCcw
-          class="w-5 h-5 transition-transform"
+          class="w-4 h-4 transition-transform"
           :class="{ 'rotate-animation': isRotating }"
         />
         Reset
@@ -338,7 +455,9 @@ const resetSearchWithAnimation = () => {
         <thead class="bg-indigo-700 text-white sticky top-0 z-10">
           <tr>
             <th class="px-4 py-2 w-[10%] text-center">Action</th>
+            <th class="px-4 py-2 w-[10%] text-center">No</th>
             <th class="px-4 py-2 w-[20%] text-center">Customer</th>
+            <th class="px-4 py-2 w-[12%] text-center">Phone</th>
             <th class="px-4 py-2 w-[20%] text-center">Passport / KTP</th>
             <th class="px-4 py-2 w-[18%] text-center">Date of Birth</th>
             <th class="px-4 py-2 w-[12%] text-center">Documents</th>
@@ -358,7 +477,7 @@ const resetSearchWithAnimation = () => {
           </tr>
 
           <tr
-            v-for="item in paginatedData"
+            v-for="(item, index) in paginatedData"
             :key="item.id"
             class="border-t border-gray-200 hover:bg-gray-50 transition"
           >
@@ -378,18 +497,27 @@ const resetSearchWithAnimation = () => {
                 </button>
               </div>
             </td>
+            <td class="px-4 py-2 text-center">
+              {{ (currentPage - 1) * perPage + index + 1 }}
+            </td>
             <td
               class="px-4 py-2 text-center truncate font-medium text-gray-800"
             >
               {{ item.deal_customer?.new_customer?.name || "-" }}
             </td>
-            <td class="px-4 py-2 text-center">{{ item.id_customer || "-" }}</td>
+            <td class="px-4 py-2 text-center">
+              {{ item.deal_customer?.new_customer?.phone || "-" }}
+            </td>
+            <td class="px-4 py-2 text-center">
+              {{ displayValue(item.id_customer) }}
+            </td>
+
             <td class="px-4 py-2 text-center">
               {{ item.tanggal_lahir || "-" }}
             </td>
             <td class="px-4 py-2 text-center">
               <span v-if="item.files?.length"
-                >{{ item.files.length }} file</span
+                >{{ item.files.length || "-" }} file</span
               >
               <span v-else class="text-gray-400">-</span>
             </td>
@@ -476,12 +604,23 @@ const resetSearchWithAnimation = () => {
               "
               class="w-full text-left px-4 py-3 hover:bg-gray-50 transition"
             >
-              {{ d.new_customer.name }}
+              {{ d.name }}
             </button>
           </div>
         </div>
       </div>
     </Transition>
+
+    <ConfirmModal
+      :show="showDeleteModal"
+      title="Hapus Data"
+      message="Apakah Anda yakin ingin menghapus data customer identity ini?"
+      cancel-text="Batal"
+      confirm-text="Hapus"
+      :loading="deleteLoading"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
