@@ -11,6 +11,7 @@ import {
   XCircle,
   Download,
   Clock,
+  X,
 } from "lucide-vue-next";
 import TablePagination from "../components/TablePagination.vue";
 import {
@@ -77,6 +78,10 @@ const getSummary = async () => {
   }
 };
 
+// Data perbulan
+const month = ref("");
+const year = ref("");
+const filterMonth = ref("");
 const isFiltering = ref(false);
 const safe = (v) => (v ?? "").toString().toLowerCase();
 const filteredCustomers = computed(() => {
@@ -135,6 +140,24 @@ const filteredCustomers = computed(() => {
         })()
       : true;
 
+    // Data perbulan
+    const matchesMonth = filterMonth.value
+      ? (() => {
+          const filter = filterMonth.value;
+
+          const checkInMonth = getMonth(c.check_in);
+          const checkOutMonth = getMonth(c.check_out);
+
+          if (checkInMonth && checkOutMonth) {
+            return filter >= checkInMonth && filter <= checkOutMonth;
+          }
+
+          return [getMonth(c.date), getMonth(identity.tanggal_lahir)].includes(
+            filter
+          );
+        })()
+      : true;
+
     const matchesProgress =
       filterProgress.value !== "all"
         ? c.progress === filterProgress.value
@@ -145,7 +168,13 @@ const filteredCustomers = computed(() => {
         ? safe(c.segmen) === safe(selectedSegmen.value)
         : true;
 
-    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+    return (
+      matchesKeyword &&
+      matchesDate &&
+      matchesMonth &&
+      matchesProgress &&
+      matchesSegmen
+    );
   });
 
   nextTick(() => {
@@ -165,33 +194,49 @@ const onlyDate = (dateStr) => {
   return `${d.getFullYear()}-${month}-${day}`;
 };
 
+// Data perbulan
+const getMonth = (date) => {
+  if (!date) return null;
+  return date.slice(0, 7);
+};
+
 const paginatedDataCustomers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
-  totalItems.value = filteredCustomers.value.length; // update totalItems sesuai filter
+  totalItems.value = filteredCustomers.value.length;
   return filteredCustomers.value.slice(start, end);
 });
-// Total halaman berdasarkan filteredCustomers
+
 const totalPages = computed(() =>
   Math.max(Math.ceil(filteredCustomers.value.length / pageSize.value), 1)
 );
 
-// Fungsi prev/next
 function prevPage() {
   if (currentPage.value > 1) {
     currentPage.value--;
   }
 }
-
 function nextPage() {
   if (currentPage.value < totalPages.value) {
     currentPage.value++;
   }
 }
 
-watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
-  currentPage.value = 1;
-});
+// Data perbulan
+watch(
+  [
+    searchKeyword,
+    filterDate,
+    filterMonth,
+    month,
+    year,
+    filterProgress,
+    selectedSegmen,
+  ],
+  () => {
+    currentPage.value = 1;
+  }
+);
 
 const uniqueSegmens = computed(() => {
   const seg = new Set();
@@ -201,11 +246,15 @@ const uniqueSegmens = computed(() => {
   return [...seg];
 });
 
+// Data perbulan
 const isRotating = ref(false);
 const resetFilters = () => {
   isRotating.value = true;
   searchKeyword.value = "";
   filterDate.value = "";
+  filterMonth.value = "";
+  month.value = "";
+  year.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
   setTimeout(() => {
@@ -327,6 +376,40 @@ const filterBySummary = async (status) => {
     block: "start",
   });
 };
+
+// Data perbulan
+const showMonthModal = ref(false);
+const showYearModal = ref(false);
+const months = [
+  { value: "01", label: "Januari" },
+  { value: "02", label: "Februari" },
+  { value: "03", label: "Maret" },
+  { value: "04", label: "April" },
+  { value: "05", label: "Mei" },
+  { value: "06", label: "Juni" },
+  { value: "07", label: "Juli" },
+  { value: "08", label: "Agustus" },
+  { value: "09", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
+];
+const years = Array.from({ length: 10 }, (_, i) => 2025 + i);
+function selectMonth(m) {
+  month.value = m;
+  showMonthModal.value = false;
+}
+function selectYear(y) {
+  year.value = y;
+  showYearModal.value = false;
+}
+watch([month, year], ([m, y]) => {
+  if (m?.value && y) {
+    filterMonth.value = `${y}-${m.value}`;
+  } else {
+    filterMonth.value = "";
+  }
+});
 </script>
 
 <template>
@@ -460,6 +543,100 @@ const filterBySummary = async (status) => {
           type="date"
           class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
+      </div>
+
+      <div class="grid grid-cols-5 gap-3">
+        <!-- BULAN -->
+        <button
+          @click="showMonthModal = true"
+          class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="month ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ month?.label || "Bulan" }}
+          </span>
+        </button>
+
+        <!-- TAHUN  -->
+        <button
+          @click="showYearModal = true"
+          class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="year ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ year || "Tahun" }}
+          </span>
+        </button>
+      </div>
+
+      <!-- MODAL BULAN -->
+      <div
+        v-if="showMonthModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showMonthModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showMonthModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Bulan</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="m in months"
+              :key="m.value"
+              @click="selectMonth(m)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ m.label }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL TAHUN -->
+      <div
+        v-if="showYearModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showYearModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showYearModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Tahun</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="y in years"
+              :key="y"
+              @click="selectYear(y)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ y }}
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Progress -->

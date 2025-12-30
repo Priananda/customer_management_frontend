@@ -60,7 +60,7 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
             class="flex flex-col items-center justify-center py-24 text-slate-400"
           >
             <div class="text-6xl mb-4">📂</div>
-            <p class="text-sm">Tidak ada file yang tersedia</p>
+            <p class="text-sm">Tidak ada file new customer yang tersedia</p>
           </div>
 
           <!-- FILE GRID -->

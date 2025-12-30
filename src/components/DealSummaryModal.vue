@@ -47,9 +47,16 @@
               </div>
 
               <div>
+                <p class="text-xs text-slate-500">Tour Packages</p>
+                <p class="font-medium">
+                  {{ deal.new_customer?.tour_packages ?? "-" }}
+                </p>
+              </div>
+
+              <div>
                 <p class="text-xs text-slate-500">Progress</p>
                 <span
-                  class="inline-block rounded-full bg-green-100 px-4 py-1 text-xs font-semibold text-green-800 border border-green-200"
+                  class="mt-1 inline-block rounded-full bg-green-100 px-4 py-1 text-xs font-semibold text-green-800 border border-green-200"
                 >
                   {{ deal.new_customer?.progress ?? "-" }}
                 </span>
@@ -138,6 +145,14 @@
               </div>
             </div>
           </div>
+
+          <!-- Reservation -->
+          <ReservationSection
+            :show="show"
+            :dealCustomerId="deal.deal_customer.id"
+            :checkIn="deal.deal_customer.new_customer.check_in"
+            :checkOut="deal.deal_customer.new_customer.check_out"
+          />
         </div>
 
         <!-- Footer -->
@@ -158,6 +173,7 @@
 
 <script setup>
 import { format } from "date-fns";
+import ReservationSection from "../components/ReservationSection.vue";
 
 defineProps({
   show: { type: Boolean, default: false },

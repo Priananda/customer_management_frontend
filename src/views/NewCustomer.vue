@@ -9,6 +9,7 @@ import {
   Trash2,
   RotateCcw,
   Download,
+  X,
 } from "lucide-vue-next";
 import FilePreviewModal from "../components/FilePreviewModal.vue";
 import ConfirmModal from "../components/ConfirmModalDelete.vue";
@@ -220,8 +221,11 @@ const confirmDelete = async () => {
   }
 };
 
+// Data perbulan
+const month = ref("");
+const year = ref("");
+const filterMonth = ref("");
 const isFiltering = ref(false);
-
 const filteredCustomers = computed(() => {
   const keyword = (searchKeyword.value || "").toLowerCase();
 
@@ -260,6 +264,22 @@ const filteredCustomers = computed(() => {
         })()
       : true;
 
+    // Data perbulan
+    const matchesMonth = filterMonth.value
+      ? (() => {
+          const filter = filterMonth.value;
+          const checkInMonth = getMonth(c.check_in);
+          const checkOutMonth = getMonth(c.check_out);
+          const dateMonth = getMonth(c.date);
+
+          if (checkInMonth && checkOutMonth) {
+            return filter >= checkInMonth && filter <= checkOutMonth;
+          }
+
+          return [dateMonth, checkInMonth, checkOutMonth].includes(filter);
+        })()
+      : true;
+
     const matchesProgress =
       filterProgress.value && filterProgress.value !== "all"
         ? c.progress === filterProgress.value
@@ -270,17 +290,63 @@ const filteredCustomers = computed(() => {
         ? (c.segmen || "").toLowerCase() === selectedSegmen.value.toLowerCase()
         : true;
 
-    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+    return (
+      matchesKeyword &&
+      matchesMonth &&
+      matchesDate &&
+      matchesProgress &&
+      matchesSegmen
+    );
   });
 });
 
-watch([searchKeyword, filterDate, filterProgress, selectedSegmen], async () => {
-  isFiltering.value = true;
-  await nextTick();
-  setTimeout(() => {
-    isFiltering.value = false;
-  }, 700);
+// Data perbulan
+watch(
+  [searchKeyword, filterMonth, filterDate, filterProgress, selectedSegmen],
+  async () => {}
+);
+
+// Data perbulan
+watch([month, year], ([m, y]) => {
+  if (m && y) {
+    filterMonth.value = `${y}-${m}`;
+    // Kombinasi bulan + tahun → trigger loading sekali
+    isFiltering.value = true;
+    nextTick(() => {
+      setTimeout(() => {
+        isFiltering.value = false;
+      }, 700);
+    });
+  } else if (y && !m) {
+    // Hanya tahun dipilih → trigger loading
+    filterMonth.value = "";
+    isFiltering.value = true;
+    nextTick(() => {
+      setTimeout(() => {
+        isFiltering.value = false;
+      }, 700);
+    });
+  } else {
+    // Hanya bulan dipilih → tidak ada loading
+    filterMonth.value = "";
+  }
 });
+watch([filterDate], ([d]) => {
+  if (d) {
+    isFiltering.value = true;
+    nextTick(() => {
+      setTimeout(() => {
+        isFiltering.value = false;
+      }, 700);
+    });
+  }
+});
+
+// Data perbulan
+const getMonth = (date) => {
+  if (!date) return null;
+  return date.slice(0, 7);
+};
 
 const formatDate = (date) => {
   if (!date) return "";
@@ -312,20 +378,11 @@ const progressColor = (progress) => {
   return "bg-slate-100 text-slate-700 border border-slate-200";
 };
 
-// const openCreateModal = () => {
-//   resetForm();
-//   editId.value = null;
-
-//   form.value.pic = formatRole(authStore.user?.role);
-
-//   showModal.value = true;
-// };
-
 const openCreateModal = () => {
   resetForm();
   editId.value = null;
 
-  form.value.pic = authStore.user?.name; // gunakan nama user login
+  form.value.pic = authStore.user?.name;
 
   showModal.value = true;
 };
@@ -340,8 +397,6 @@ const openEditModal = (customer) => {
   form.value.hotel = customer.hotel
     ? customer.hotel.split(",").map((h) => h.trim())
     : [""];
-
-  // form.value.pic = formatRole(authStore.user?.role);
 
   fetchCustomerFiles(customer.id);
   showModal.value = true;
@@ -458,11 +513,15 @@ const progressOptions = [
   },
 ];
 
+// Data perbulan
 const isRotating = ref(false);
 function resetFilters() {
   isRotating.value = true;
   searchKeyword.value = "";
   filterDate.value = "";
+  filterMonth.value = "";
+  month.value = "";
+  year.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
 
@@ -663,6 +722,40 @@ const instagramUrl = (val) => {
 
   return `https://www.instagram.com/${val.replace("@", "")}`;
 };
+
+// Data perbulan
+const showMonthModal = ref(false);
+const showYearModal = ref(false);
+const months = [
+  { value: "01", label: "Januari" },
+  { value: "02", label: "Februari" },
+  { value: "03", label: "Maret" },
+  { value: "04", label: "April" },
+  { value: "05", label: "Mei" },
+  { value: "06", label: "Juni" },
+  { value: "07", label: "Juli" },
+  { value: "08", label: "Agustus" },
+  { value: "09", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
+];
+const years = Array.from({ length: 10 }, (_, i) => 2025 + i);
+function selectMonth(m) {
+  month.value = m;
+  showMonthModal.value = false;
+}
+function selectYear(y) {
+  year.value = y;
+  showYearModal.value = false;
+}
+watch([month, year], ([m, y]) => {
+  if (m?.value && y) {
+    filterMonth.value = `${y}-${m.value}`;
+  } else {
+    filterMonth.value = "";
+  }
+});
 </script>
 
 <template>
@@ -708,6 +801,99 @@ const instagramUrl = (val) => {
           type="date"
           class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
+      </div>
+      <div class="grid grid-cols-5 gap-3">
+        <!-- BULAN -->
+        <button
+          @click="showMonthModal = true"
+          class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="month ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ month?.label || "Bulan" }}
+          </span>
+        </button>
+
+        <!-- TAHUN  -->
+        <button
+          @click="showYearModal = true"
+          class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="year ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ year || "Tahun" }}
+          </span>
+        </button>
+      </div>
+
+      <!-- MODAL BULAN -->
+      <div
+        v-if="showMonthModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showMonthModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showMonthModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Bulan</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="m in months"
+              :key="m.value"
+              @click="selectMonth(m)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ m.label }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL TAHUN -->
+      <div
+        v-if="showYearModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showYearModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showYearModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Tahun</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="y in years"
+              :key="y"
+              @click="selectYear(y)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ y }}
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Progress dropdown -->

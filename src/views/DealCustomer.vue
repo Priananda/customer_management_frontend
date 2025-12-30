@@ -11,6 +11,7 @@ import {
   X,
   Download,
 } from "lucide-vue-next";
+import DealSummaryModal from "../components/DealSummaryModal.vue";
 import TransportList from "..//components/TransportList.vue";
 import ConfirmModal from "../components/ConfirmModalDelete.vue";
 import TablePagination from "../components/TablePagination.vue";
@@ -22,6 +23,7 @@ import {
   onBeforeUnmount,
   watch,
   nextTick,
+  reactive,
 } from "vue";
 import CustomerIdentity from "../components/CustomerIdentity.vue";
 import api from "../api/api";
@@ -76,7 +78,7 @@ const editFormNewCustomer = ref({
   hotel: [""],
   notes: "",
 });
-
+// FITUR RESERVASI
 const dealForm = ref({
   id: null,
   new_customer_id: "",
@@ -97,6 +99,23 @@ const dealForm = ref({
       note_operation: "",
       report: "",
       foto: [],
+    },
+  ],
+
+  reservations: [
+    {
+      // HOTEL
+      phone_hotel: "",
+      lokasi_hotel: "",
+
+      // LUNCH multiple
+      lunches: [{ lunch: "", phone: "", lokasi: "" }],
+
+      // DINNER multiple
+      dinners: [{ dinner: "", phone: "", lokasi: "" }],
+
+      // ACTIVITY multiple
+      activities: [{ activity: "", phone: "", lokasi: "" }],
     },
   ],
 });
@@ -280,6 +299,7 @@ const onSelectCustomer = () => {
   );
 };
 
+// FITUR RESERVASI
 const addTransport = () => {
   dealForm.value.transport.push({
     guide: "",
@@ -291,143 +311,87 @@ const addTransport = () => {
     foto: [],
   });
 };
-
+// FITUR RESERVASI
 const removeTransport = (index) => {
   dealForm.value.transport.splice(index, 1);
 };
-const handleTransportFiles = (e, index) => {
-  const files = Array.from(e.target.files);
-  dealForm.value.transport[index].foto.push(...files);
+
+// FITUR RESERVASI
+// const addReservation = () => {
+//   if (!Array.isArray(dealForm.value.reservations)) {
+//     dealForm.value.reservations = [];
+//   }
+//   dealForm.value.reservations.push({
+//     phone_hotel: "",
+//     lokasi_hotel: "",
+//     lunches: [],
+//     dinners: [],
+//     activities: [],
+//   });
+// };
+// FITUR RESERVASI
+const showDateAlert = reactive({ reservation: false });
+const addReservation = () => {
+  const checkIn =
+    dealForm.value.check_in || dealForm.value.new_customer?.check_in;
+  const checkOut =
+    dealForm.value.check_out || dealForm.value.new_customer?.check_out;
+
+  if (!checkIn || !checkOut) {
+    showDateAlert.reservation = true;
+
+    // hide alert setelah 3 detik
+    setTimeout(() => {
+      showDateAlert.reservation = false;
+    }, 3000);
+    return;
+  }
+  if (!Array.isArray(dealForm.value.reservations)) {
+    dealForm.value.reservations = [];
+  }
+  dealForm.value.reservations.push({
+    phone_hotel: "",
+    lokasi_hotel: "",
+    lunches: [],
+    dinners: [],
+    activities: [],
+    date: null,
+  });
 };
 
-const removeTransportFile = (trIndex, fIndex) => {
-  const transport = dealForm.value.transport?.[trIndex];
-  if (!transport || !Array.isArray(transport.foto)) return;
-
-  if (fIndex < 0 || fIndex >= transport.foto.length) return;
-
-  transport.foto.splice(fIndex, 1);
-};
-const removeExistingTransportFile = (trIndex, fIndex, file) => {
-  const transport = dealForm.value.transport?.[trIndex];
-  if (!transport || !Array.isArray(transport.foto_existing)) return;
-
-  if (fIndex < 0 || fIndex >= transport.foto_existing.length) return;
-
-  transport.foto_existing.splice(fIndex, 1);
-
-  if (file?.id) {
-    api
-      .delete(`/transport-files/${file.id}`)
-      .then(() => console.log("File deleted"))
-      .catch((err) => console.error(err));
+// FITUR RESERVASI
+const deletedReservationIds = ref([]);
+const removeReservation = (index) => {
+  const removed = dealForm.value.reservations.splice(index, 1)[0];
+  if (removed?.id) {
+    deletedReservationIds.value.push(removed.id);
   }
 };
-
-// const handleSave = async () => {
-//   // === VALIDASI: pastikan ada new_customer_id ===
-//   if (!dealForm.value.new_customer_id) {
-//     alertType.value = "error";
-//     alertMessage.value = "Pilih customer terlebih dahulu.";
-//     showAlert.value = true;
-//     setTimeout(() => (showAlert.value = false), 3000);
-//     return;
-//   }
-
-//   isLoading.value = true;
-//   const fd = new FormData();
-
-//   // ==========================
-//   // 1. NEW CUSTOMER UPDATE
-//   // ==========================
-//   if (editFormNewCustomer.value) {
-//     Object.keys(editFormNewCustomer.value).forEach((key) => {
-//       let val = editFormNewCustomer.value[key];
-
-//       // convert hotel array jadi string
-//       if (key === "hotel" && Array.isArray(val)) val = val.join(",");
-
-//       if (val !== null && val !== undefined && typeof val !== "object") {
-//         fd.append(`new_customer[${key}]`, String(val));
-//       }
-//     });
-//   }
-
-//   fd.append("new_customer_id", dealForm.value.new_customer_id);
-
-//   // ==========================
-//   // 2. DATA DEAL CUSTOMER
-//   // ==========================
-//   Object.keys(dealForm.value).forEach((key) => {
-//     const val = dealForm.value[key];
-//     if (key === "transport") return; // handle transport terpisah
-//     if (key === "payment_status" && !val) return;
-//     if (val !== null && val !== undefined) fd.append(key, String(val));
-//   });
-
-//   // ==========================
-//   // 3. TRANSPORT + FILE
-//   // ==========================
-//   dealForm.value.transport.forEach((tr, i) => {
-//     fd.append(`transport[${i}][id]`, tr.id ?? "");
-//     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
-//     fd.append(`transport[${i}][hp_guide]`, tr.hp_guide ?? "");
-//     fd.append(`transport[${i}][driver]`, tr.driver ?? "");
-//     fd.append(`transport[${i}][hp_driver]`, tr.hp_driver ?? "");
-//     fd.append(`transport[${i}][note_operation]`, tr.note_operation ?? "");
-//     fd.append(`transport[${i}][report]`, tr.report ?? "");
-
-//     // foto existing
-//     (tr.foto_existing || []).forEach((old) => {
-//       fd.append(`transport[${i}][foto_existing][]`, old.file_name);
-//     });
-
-//     // foto baru
-//     (tr.foto || []).forEach((file) => {
-//       fd.append(`transport[${i}][foto][]`, file);
-//     });
-//   });
-
-//   // ==========================
-//   // 4. FILE DEAL CUSTOMER TAMBAHAN
-//   // ==========================
-//   dealSelectedFiles.value.forEach((file) => {
-//     fd.append("files[]", file);
-//   });
-
-//   try {
-//     let res;
-//     if (!dealForm.value.id) {
-//       // CREATE
-//       res = await api.post("/deal-customer", fd, {
-//         headers: { "Content-Type": "multipart/form-data" },
-//       });
-//     } else {
-//       // UPDATE
-//       res = await api.post(
-//         `/deal-customer/${dealForm.value.id}?_method=PUT`,
-//         fd,
-//         { headers: { "Content-Type": "multipart/form-data" } }
-//       );
-//     }
-
-//     // Bersihkan file yang sudah di-upload
-//     dealSelectedFiles.value = [];
-
-//     // Reload preview file dari backend
-//     await loadFiles(res.data.data.id, dealForm.value.new_customer_id);
-
-//     isEditing.value = false;
-//     console.log("response:", res.data);
-//   } catch (error) {
-//     console.error("error:", error?.response?.data || error);
-//     alert("Gagal menyimpan deal customer");
-//   } finally {
-//     isLoading.value = false;
-//     reset();
-//   }
-// };
-
+// FITUR RESERVASI
+const addLunch = (resIndex) => {
+  const res = dealForm.value.reservations[resIndex];
+  if (!Array.isArray(res.lunches)) res.lunches = [];
+  res.lunches.push({ name: "", phone: "", location: "" });
+};
+// FITUR RESERVASI
+const addDinner = (resIndex) => {
+  const res = dealForm.value.reservations[resIndex];
+  if (!Array.isArray(res.dinners)) res.dinners = [];
+  res.dinners.push({ name: "", phone: "", location: "" });
+};
+// FITUR RESERVASI
+const addActivity = (resIndex) => {
+  const res = dealForm.value.reservations[resIndex];
+  if (!Array.isArray(res.activities)) res.activities = [];
+  res.activities.push({ name: "", phone: "", location: "" });
+};
+// FITUR RESERVASI
+const removeItem = (resIndex, type, index) => {
+  const arr = dealForm.value.reservations[resIndex][type];
+  if (!Array.isArray(arr)) return;
+  arr.splice(index, 1);
+};
+// FITUR RESERVASI
 const handleSave = async () => {
   //  VALIDASI: pastikan ada new_customer_id
   if (!dealForm.value.new_customer_id) {
@@ -486,6 +450,33 @@ const handleSave = async () => {
     });
   });
 
+  // const reservations = Array.isArray(dealForm.value.reservations)
+  //   ? dealForm.value.reservations
+  //   : [dealForm.value.reservations];
+  const reservations = (
+    Array.isArray(dealForm.value.reservations)
+      ? dealForm.value.reservations
+      : [dealForm.value.reservations]
+  ).filter((res) => res && typeof res === "object");
+
+  reservations.forEach((res, i) => {
+    if (res.id) fd.append(`reservation[${i}][id]`, res.id); // <-- ID lama
+
+    fd.append(`reservation[${i}][phone_hotel]`, res.phone_hotel ?? "");
+    fd.append(`reservation[${i}][lokasi_hotel]`, res.lokasi_hotel ?? "");
+    fd.append(`reservation[${i}][lunch]`, JSON.stringify(res.lunches || []));
+    fd.append(`reservation[${i}][dinner]`, JSON.stringify(res.dinners || []));
+    fd.append(
+      `reservation[${i}][activity]`,
+      JSON.stringify(res.activities || [])
+    );
+  });
+
+  // Kirim deletedReservationIds ke backend
+  deletedReservationIds.value.forEach((id) => {
+    fd.append("deleted_reservation_ids[]", id);
+  });
+
   // 4. FILE DEAL CUSTOMER TAMBAHAN
   dealSelectedFiles.value.forEach((file) => {
     fd.append("files[]", file);
@@ -535,37 +526,9 @@ const handleSave = async () => {
   }
 };
 
-// const confirmDelete = async () => {
-//   try {
-//     if (deleteType.value === "deal") {
-//       await api.delete(`/deal-customer/${selectedId.value}`);
-
-//       const row = combinedData.value.find(
-//         (r) => r.deal_customer?.id === selectedId.value
-//       );
-//       if (row?.new_customer?.id) {
-//         deletedDealCustomerIds.value.push(row.new_customer.id);
-//         localStorage.setItem(
-//           "deletedDealCustomerIds",
-//           JSON.stringify(deletedDealCustomerIds.value)
-//         );
-//       }
-//     } else {
-//       await api.delete(`/new-customer/${selectedId.value}`);
-//     }
-
-//     await loadData();
-//     showDeleteModal.value = false;
-//   } catch (error) {
-//     console.error("confirmDelete error:", error);
-//     alert("Gagal menghapus data.");
-//   }
-// };
-
 const confirmDelete = async () => {
   try {
     let row;
-
     // Cek sebelum melakukan delete
     console.log("Delete type:", deleteType.value);
     console.log("Selected ID:", selectedId.value);
@@ -667,7 +630,11 @@ const reset = () => {
 };
 onMounted(loadData);
 
+// Data perbulan
 const formatDate = (dateStr) => dateStr?.substring(0, 10) || "";
+const month = ref("");
+const year = ref("");
+const filterMonth = ref("");
 const isFiltering = ref(false);
 const filteredDeals = computed(() => {
   isFiltering.value = true;
@@ -737,7 +704,7 @@ const filteredDeals = computed(() => {
     // 4. Filter lain: date, progress, segmen
     const matchesDate = dateFilter
       ? (() => {
-          const filter = dateFilter; // YYYY-MM-DD
+          const filter = dateFilter;
           const checkIn = formatDate(c.check_in);
           const checkOut = formatDate(c.check_out);
 
@@ -751,6 +718,21 @@ const filteredDeals = computed(() => {
         })()
       : true;
 
+    const matchesMonth = filterMonth.value
+      ? (() => {
+          const filter = filterMonth.value; // format YYYY-MM
+          const checkInMonth = c.check_in?.substring(0, 7);
+          const checkOutMonth = c.check_out?.substring(0, 7);
+          const dateMonth = c.date?.substring(0, 7);
+
+          if (checkInMonth && checkOutMonth) {
+            return filter >= checkInMonth && filter <= checkOutMonth;
+          }
+
+          return [dateMonth, checkInMonth, checkOutMonth].includes(filter);
+        })()
+      : true;
+
     const matchesProgress =
       progressFilter && progressFilter !== "all"
         ? (c.progress || "").toLowerCase() === progressFilter.toLowerCase()
@@ -761,7 +743,13 @@ const filteredDeals = computed(() => {
         ? (c.segmen || "").toLowerCase() === segmenFilter.toLowerCase()
         : true;
 
-    return matchesKeyword && matchesDate && matchesProgress && matchesSegmen;
+    return (
+      matchesKeyword &&
+      matchesMonth &&
+      matchesDate &&
+      matchesProgress &&
+      matchesSegmen
+    );
   });
 
   nextTick(() => {
@@ -773,8 +761,38 @@ const filteredDeals = computed(() => {
   return result;
 });
 
-watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
-  currentPage.value = 1;
+// Data perbulan
+watch(
+  [searchKeyword, filterMonth, filterDate, filterProgress, selectedSegmen],
+  () => {
+    currentPage.value = 1;
+  }
+);
+
+// Data perbulan
+watch([month, year], ([m, y]) => {
+  if (m && y) {
+    filterMonth.value = `${y}-${m}`;
+    // Kombinasi bulan + tahun → trigger loading sekali
+    isFiltering.value = true;
+    nextTick(() => {
+      setTimeout(() => {
+        isFiltering.value = false;
+      }, 700);
+    });
+  } else if (y && !m) {
+    // Hanya tahun dipilih → trigger loading
+    filterMonth.value = "";
+    isFiltering.value = true;
+    nextTick(() => {
+      setTimeout(() => {
+        isFiltering.value = false;
+      }, 700);
+    });
+  } else {
+    // Hanya bulan dipilih → tidak ada loading
+    filterMonth.value = "";
+  }
 });
 
 const uniqueSegmens = computed(() => {
@@ -786,6 +804,7 @@ const uniqueSegmens = computed(() => {
   return Array.from(seg);
 });
 
+// Data perbulan
 const isRotating = ref(false);
 const resetFilters = () => {
   isRotating.value = true;
@@ -793,10 +812,18 @@ const resetFilters = () => {
     isRotating.value = false;
   }, 600);
 
+  filterMonth.value = "";
+  month.value = "";
+  year.value = "";
   searchKeyword.value = "";
   filterDate.value = "";
   filterProgress.value = "all";
   selectedSegmen.value = "all";
+};
+// Data perbulan
+const getMonth = (date) => {
+  if (!date) return null;
+  return date.slice(0, 7);
 };
 
 const openOnlyProgress = () => {
@@ -864,25 +891,6 @@ const progressColor = (status) => {
   }
 };
 
-const toggleCustomerDropdown = () => {
-  closeAllDropdowns();
-  showCustomerDropdown.value = !showCustomerDropdown.value;
-};
-
-const selectCustomer = (cust) => {
-  if (!cust) {
-    dealForm.value.new_customer_id = "";
-    selectedCustomerText.value = "";
-    selectedCustomer.value = null;
-  } else {
-    dealForm.value.new_customer_id = cust.id;
-    selectedCustomerText.value = `${cust.name}`;
-    onSelectCustomer();
-  }
-
-  showCustomerDropdown.value = false;
-};
-
 const cancelEdit = () => {
   if (originalDealData.value) {
     dealForm.value = {
@@ -923,14 +931,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("click", handleDropdownOutside);
 });
 
-const progressWidthModal = (progress) => {
-  const p = (progress || "").toLowerCase();
-  if (p === "deal") return "100%";
-  if (p === "on progress") return "60%";
-  if (p === "canceled") return "30%";
-  return "40%";
-};
-
 const paginatedDataCustomers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const list = filteredDeals.value;
@@ -967,8 +967,6 @@ const filteredCustomers = computed(() => {
 });
 
 // MULAI DARI SINI FITUR UPLOAD FILE DEAL CUSTOMER + RELASI NEW CUSTOMER
-const dealFiles = ref([]);
-const customerFiles = ref([]);
 const allFiles = ref([]);
 const dealSelectedFiles = ref([]);
 const API_BASE = "http://127.0.0.1:8000";
@@ -991,18 +989,6 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
         source: "new_customer",
       }));
     }
-
-    // --- 2. Load deal customer files YANG LAMA BISA PREVIEW TRANSPORT---
-    // if (dealCustomerId) {
-    //   const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
-    //   dealFilesApi = (dealRes.data.files ?? []).map((f) => ({
-    //     id: `dc-${f.real_id}`,
-    //     real_id: f.real_id,
-    //     original_name: f.original_name,
-    //     preview_url: `${API_BASE}${f.preview_url}`,
-    //     source: "deal_customer",
-    //   }));
-    // }
 
     if (dealCustomerId) {
       const dealRes = await api.get(`/deal-customer-files/${dealCustomerId}`);
@@ -1053,6 +1039,7 @@ const isDealFile = (file) => {
   return String(file.source).trim() === "deal_customer";
 };
 
+// FITUR RESERVASI
 const editDeal = (d) => {
   isEditing.value = true;
 
@@ -1119,6 +1106,105 @@ const editDeal = (d) => {
     notes: d.new_customer?.notes ?? "",
   };
 
+  // const start = d.new_customer?.check_in;
+  // const end = d.new_customer?.check_out;
+
+  // if (start && end) {
+  //   const startDate = new Date(start);
+  //   const endDate = new Date(end);
+
+  //   const dateArray = [];
+  //   let current = new Date(startDate);
+  //   while (current < endDate) {
+  //     dateArray.push(new Date(current));
+  //     current.setDate(current.getDate() + 1);
+  //   }
+
+  //   const oldReservations = d.deal_customer?.reservation || [];
+
+  //   // buat map supaya gampang dicocokkan, misal pakai tanggal lama atau index
+  //   const oldMap = oldReservations.reduce((acc, r) => {
+  //     // bisa tambahkan logika tanggal di backend kalau ada field date
+  //     acc[r.id] = r;
+  //     return acc;
+  //   }, {});
+
+  //   dealForm.value.reservations = dateArray.map((date, index) => {
+  //     const dateStr = date.toISOString().split("T")[0];
+
+  //     // ambil reservation lama jika ada, urut berdasarkan index
+  //     const old = oldReservations[index];
+
+  //     return old
+  //       ? {
+  //           id: old.id,
+  //           phone_hotel: old.phone_hotel ?? "",
+  //           lokasi_hotel: old.lokasi_hotel ?? "",
+  //           lunches: old.lunch ? JSON.parse(old.lunch) : [],
+  //           dinners: old.dinner ? JSON.parse(old.dinner) : [],
+  //           activities: old.activity ? JSON.parse(old.activity) : [],
+  //           date: dateStr,
+  //         }
+  //       : {
+  //           id: null,
+  //           phone_hotel: "",
+  //           lokasi_hotel: "",
+  //           lunches: [],
+  //           dinners: [],
+  //           activities: [],
+  //           date: dateStr,
+  //         };
+  //   });
+  // }
+
+  // --- Reservation otomatis berdasarkan check-in / check-out ---
+  const start = d.new_customer?.check_in;
+  const end = d.new_customer?.check_out;
+
+  if (start && end) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+
+    const dateArray = [];
+    let current = new Date(startDate);
+    while (current < endDate) {
+      dateArray.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+
+    const oldReservations = d.deal_customer?.reservation || [];
+    const guestName = d.new_customer?.name ?? "";
+
+    dealForm.value.reservations = dateArray.map((date, index) => {
+      const dateStr = date.toISOString().split("T")[0];
+
+      // ambil reservation lama jika ada, urut berdasarkan index
+      const old = oldReservations[index];
+
+      return old
+        ? {
+            id: old.id,
+            phone_hotel: old.phone_hotel ?? "",
+            lokasi_hotel: old.lokasi_hotel ?? "",
+            lunches: old.lunch ? JSON.parse(old.lunch) : [],
+            dinners: old.dinner ? JSON.parse(old.dinner) : [],
+            activities: old.activity ? JSON.parse(old.activity) : [],
+            date: dateStr,
+            guest_name: guestName, // <-- tambah field guest_name
+          }
+        : {
+            id: null,
+            phone_hotel: "",
+            lokasi_hotel: "",
+            lunches: [],
+            dinners: [],
+            activities: [],
+            date: dateStr,
+            guest_name: guestName, // <-- tambah field guest_name
+          };
+    });
+  }
+
   dealSelectedFiles.value = [];
   loadFiles(d.deal_customer?.id ?? null, d.new_customer?.id ?? null);
 
@@ -1144,50 +1230,6 @@ const removeEditHotel = (index) => {
 // Saat memilih file baru
 const showDealAlert = ref(false);
 const dealAlertMessage = ref("");
-// const handleDealFileChange = async (e) => {
-//   const files = Array.from(e.target.files);
-//   if (!files.length) return;
-
-//   // pastikan deal sudah ada
-//   if (!dealForm.value.id) {
-//     dealAlertMessage.value =
-//       "Upload file deal customer gagal!, harap input data deal customer terlebih dahulu. Keluar";
-//     showDealAlert.value = true;
-
-//     setTimeout(() => {
-//       showDealAlert.value = false;
-//     }, 6000);
-
-//     return;
-//   }
-
-//   // tampilkan dulu di UI
-//   dealSelectedFiles.value.push(...files);
-
-//   const formData = new FormData();
-//   files.forEach((file) => formData.append("files[]", file));
-
-//   try {
-//     await api.post(
-//       `/deal-customer-files/upload/${dealForm.value.id}`,
-//       formData,
-//       { headers: { "Content-Type": "multipart/form-data" } }
-//     );
-
-//     // reload preview dari backend
-//     await loadFiles(dealForm.value.id, dealForm.value.new_customer_id);
-
-//     // kosongkan preview local
-//     dealSelectedFiles.value = [];
-//   } catch (err) {
-//     console.error("Upload gagal:", err);
-//     alert("Upload file gagal");
-//   }
-
-//   // reset input supaya file yang sama bisa dipilih lagi
-//   e.target.value = "";
-// };
-
 const handleDealFileChange = (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
@@ -1203,18 +1245,6 @@ const handleDealFileChange = (e) => {
 const removeDealSelectedFile = (index) => {
   dealSelectedFiles.value.splice(index, 1);
 };
-
-// // Hapus file yang sudah disimpan di backend
-// const deleteDealExistingFile = async (fileId) => {
-//   try {
-//     await api.delete(`/deal-customer-files/${fileId}`);
-//     dealExistingFiles.value = dealExistingFiles.value.filter(
-//       (f) => f.id !== fileId
-//     );
-//   } catch (error) {
-//     console.error("Delete failed:", error);
-//   }
-// };
 
 // DOWLOAD + MODAL + GABUNG NEW & DEAL
 const showFileModal = ref(false);
@@ -1364,7 +1394,6 @@ const previewFiles = computed(() => {
   return allFiles.value.filter((f) => f.source !== "transport");
 });
 
-import DealSummaryModal from "../components/DealSummaryModal.vue";
 const modalVisible = ref(false);
 const selectedDeal = ref({});
 
@@ -1372,6 +1401,54 @@ const openModal = (deal) => {
   selectedDeal.value = deal;
   modalVisible.value = true;
 };
+
+// Data perbulan
+const showMonthModal = ref(false);
+const showYearModal = ref(false);
+const months = [
+  { value: "01", label: "Januari" },
+  { value: "02", label: "Februari" },
+  { value: "03", label: "Maret" },
+  { value: "04", label: "April" },
+  { value: "05", label: "Mei" },
+  { value: "06", label: "Juni" },
+  { value: "07", label: "Juli" },
+  { value: "08", label: "Agustus" },
+  { value: "09", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
+];
+const years = Array.from({ length: 10 }, (_, i) => 2025 + i);
+function selectMonth(m) {
+  month.value = m;
+  showMonthModal.value = false;
+}
+function selectYear(y) {
+  year.value = y;
+  showYearModal.value = false;
+}
+watch([month, year], ([m, y]) => {
+  if (m?.value && y) {
+    filterMonth.value = `${y}-${m.value}`;
+  } else {
+    filterMonth.value = "";
+  }
+});
+
+// function generateDates(start, end) {
+//   const dates = [];
+//   let current = new Date(start);
+//   const endDate = new Date(end);
+
+//   while (current < endDate) {
+//     // stop sebelum check-out
+//     dates.push(new Date(current));
+//     current.setDate(current.getDate() + 1);
+//   }
+
+//   return dates;
+// }
 </script>
 
 <template>
@@ -2057,7 +2134,7 @@ const openModal = (deal) => {
           >
             <div class="flex justify-between items-center mb-3">
               <h4 class="font-semibold text-slate-700">
-                Transport #{{ index + 1 }}
+                Transport {{ index + 1 }}
               </h4>
               <button
                 v-if="dealForm.transport.length > 1"
@@ -2123,82 +2200,265 @@ const openModal = (deal) => {
                   placeholder="Report"
                 ></textarea>
               </div>
-
-              <!-- Upload Foto Transport -->
-              <!-- <div class="col-span-2">
-                <label class="font-medium text-slate-700"
-                  >Upload Foto Transport</label
-                >
-                <input
-                  type="file"
-                  multiple
-                  @change="handleTransportFiles($event, index)"
-                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-                />
-
-                <div
-                  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3"
-                >
-                 
-                  <div
-                    v-for="(file, fIndex) in tr.foto_existing"
-                    :key="'old-' + fIndex"
-                    class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
-                    @click="openPreviewExisting(file)"
-                  >
-                   
-                    <span
-                      class="text-sm truncate max-w-[150px] block text-center"
-                    >
-                      {{ file.original_name || file.file_name }}
-                    </span>
-
-                 
-                    <button
-                      type="button"
-                      @click.stop="
-                        removeExistingTransportFile(index, fIndex, file)
-                      "
-                      class="absolute top-1 right-1 text-red-500 bg-white rounded-full px-2"
-                    >
-                      ×
-                    </button>
-                  </div>
-
-       
-                  <div
-                    v-for="(file, fIndex) in tr.foto"
-                    :key="'new-' + fIndex"
-                    class="relative p-2 border border-slate-300 rounded-md bg-slate-100 cursor-pointer"
-                    @click="openPreviewNew(file)"
-                  >
-                    
-                    <span class="text-sm truncate block text-center">
-                      {{ file.name }}
-                    </span>
-
-                    <button
-                      type="button"
-                      @click.stop="removeTransportFile(index, fIndex)"
-                      class="absolute top-1 right-1 text-red-500 bg-white rounded-full px-2"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              </div> -->
             </div>
           </div>
-
           <!-- Button Add Transport -->
           <button
             @click="addTransport"
             class="px-4 py-2 bg-slate-800 text-white rounded-lg mb-6"
           >
-            + Tambah Transport
+            + Add Transport
           </button>
         </div>
         <!-- ================= END TRANSPORT FORM ================= -->
+
+        <!-- ================= RESERVATION FORM ================= -->
+        <div class="col-span-2 mt-8">
+          <h3 class="text-lg font-semibold mb-4 text-slate-700">
+            Reservation Information
+          </h3>
+
+          <div
+            v-for="(rs, index) in dealForm.reservations"
+            :key="index"
+            class="border border-slate-300 rounded-xl p-5 mb-6 bg-white shadow-sm"
+          >
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="font-semibold text-slate-700">
+                Reservation {{ index + 1 }} - {{ rs.guest_name }} -
+                {{ rs.date }}
+              </h4>
+
+              <button
+                v-if="dealForm.reservations.length > 1"
+                @click="removeReservation(index)"
+                class="text-red-600 hover:text-red-800"
+              >
+                Hapus
+              </button>
+            </div>
+
+            <div class="flex flex-col gap-5 text-[15px]">
+              <!-- HOTEL -->
+              <div>
+                <label class="font-medium text-slate-700">Phone Hotel</label>
+                <input
+                  v-model="rs.phone_hotel"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  placeholder="Phone Hotel"
+                />
+              </div>
+
+              <div>
+                <label class="font-medium text-slate-700">Lokasi Hotel</label>
+                <input
+                  v-model="rs.lokasi_hotel"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  placeholder="Lokasi Hotel"
+                />
+              </div>
+
+              <!-- LUNCH -->
+              <div
+                v-for="(l, li) in rs.lunches"
+                :key="li"
+                class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
+              >
+                <!-- NAME -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Lunch
+                  </label>
+                  <input
+                    v-model="l.name"
+                    placeholder="Lunch"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- PHONE -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    v-model="l.phone"
+                    placeholder="Phone Lunch"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- LOCATION -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Location
+                  </label>
+                  <input
+                    v-model="l.location"
+                    placeholder="Lokasi Lunch"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- REMOVE -->
+                <div class="flex items-end">
+                  <button
+                    @click="removeItem(index, 'lunches', li)"
+                    class="h-11 w-11 text-red-600"
+                    title="Remove lunch"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <button
+                @click="addLunch(index)"
+                class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
+              >
+                + Add Lunch
+              </button>
+
+              <!-- 🍽️ DINNER -->
+              <div
+                v-for="(d, di) in rs.dinners"
+                :key="di"
+                class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
+              >
+                <!-- NAME -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Dinner
+                  </label>
+                  <input
+                    v-model="d.name"
+                    placeholder="Dinner"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- PHONE -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    v-model="d.phone"
+                    placeholder="Phone Dinner"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- LOCATION -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Location
+                  </label>
+                  <input
+                    v-model="d.location"
+                    placeholder="Lokasi Dinner"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- REMOVE -->
+                <div class="flex items-end">
+                  <button
+                    @click="removeItem(index, 'dinners', di)"
+                    class="h-11 w-11 text-red-600"
+                    title="Remove dinner"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <button
+                @click="addDinner(index)"
+                class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
+              >
+                + Add Dinner
+              </button>
+
+              <!-- ACTIVITY -->
+              <div
+                v-for="(a, ai) in rs.activities"
+                :key="ai"
+                class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
+              >
+                <!-- NAME -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Activity
+                  </label>
+                  <input
+                    v-model="a.name"
+                    placeholder="Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- PHONE -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    v-model="a.phone"
+                    placeholder="Phone Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- LOCATION -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Location
+                  </label>
+                  <input
+                    v-model="a.location"
+                    placeholder="Lokasi Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <!-- REMOVE -->
+                <div class="flex items-end">
+                  <button
+                    @click="removeItem(index, 'activities', ai)"
+                    class="h-11 w-11 text-red-600"
+                    title="Remove activity"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <button
+                @click="addActivity(index)"
+                class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
+              >
+                + Add Activity
+              </button>
+            </div>
+          </div>
+
+          <!-- <div class="relative">
+            <button
+              @click="addReservation"
+              class="px-4 py-2 bg-slate-800 text-white rounded-lg mb-2"
+            >
+              + Add Reservation
+            </button>
+
+            <span
+              v-if="showDateAlert.reservation"
+              class="text-red-600 text-sm block"
+            >
+              Harap isikan tanggal check-in dan check-out pada deal customer
+            </span>
+          </div> -->
+        </div>
       </div>
 
       <!-- Save -->
@@ -2266,6 +2526,99 @@ const openModal = (deal) => {
           type="date"
           class="w-full hover:shadow-md transition border border-slate-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none"
         />
+      </div>
+      <div class="grid grid-cols-5 gap-3">
+        <!-- BULAN -->
+        <button
+          @click="showMonthModal = true"
+          class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="month ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ month?.label || "Bulan" }}
+          </span>
+        </button>
+
+        <!-- TAHUN  -->
+        <button
+          @click="showYearModal = true"
+          class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
+          :class="year ? 'text-slate-900' : 'text-slate-700'"
+        >
+          <Calendar
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          />
+          <span class="whitespace-nowrap truncate">
+            {{ year || "Tahun" }}
+          </span>
+        </button>
+      </div>
+
+      <!-- MODAL BULAN -->
+      <div
+        v-if="showMonthModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showMonthModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showMonthModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Bulan</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="m in months"
+              :key="m.value"
+              @click="selectMonth(m)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ m.label }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL TAHUN -->
+      <div
+        v-if="showYearModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        @click.self="showYearModal = false"
+      >
+        <div
+          class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
+        >
+          <!-- X pojok kanan -->
+          <X
+            class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
+            @click="showYearModal = false"
+          />
+
+          <div class="px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-gray-800">Pilih Tahun</h3>
+          </div>
+
+          <div class="max-h-72 overflow-auto hidden-scroll">
+            <div
+              v-for="y in years"
+              :key="y"
+              @click="selectYear(y)"
+              class="px-4 py-2 cursor-pointer text-gray-800 hover:bg-slate-100 transition"
+            >
+              {{ y }}
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Progress Dropdown -->
@@ -2648,7 +3001,7 @@ const openModal = (deal) => {
             <td class="px-4 py-2">
               <button
                 @click="openModal(d)"
-                class="relative rounded px-1 transition hover:bg-slate-100 hover:underline focus:outline-none"
+                class="relative rounded px-1 transition text-blue-700 hover:text-blue-800 hover:bg-slate-100 hover:underline focus:outline-none"
               >
                 {{ d.new_customer?.name ?? "-" }}
               </button>
