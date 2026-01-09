@@ -13,20 +13,20 @@ import {
   RotateCcw,
 } from "lucide-vue-next";
 
-const BACKEND_URL = "http://127.0.0.1:8000";
-
+const isSubmitting = ref(false);
 const showDeleteModal = ref(false);
 const deleteLoading = ref(false);
 const deleteTargetId = ref(null);
 const showForm = ref(false);
 const showCustomerModal = ref(false);
 const isLoading = ref(false);
-let searchTimeout = null;
+const searchTimeout = null;
 const selectedDeal = ref(null);
 const deals = ref([]);
 const identities = ref([]);
 const newFiles = ref([]);
 const search = ref("");
+const searchCustomer = ref("");
 
 const currentPage = ref(1);
 const perPage = 5;
@@ -40,22 +40,11 @@ const form = ref({
 
 const isEditMode = computed(() => !!form.value.id);
 
-// const loadDeals = async () => {
-//   const res = await api.get("/deal-customer");
-//   const raw = res.data?.data || [];
-
-//   deals.value = raw.filter((d) => d.new_customer);
-
-//   if (!selectedDeal.value && deals.value.length === 1) {
-//     selectedDeal.value = deals.value[0];
-//   }
-// };
 const loadDeals = async () => {
   const res = await api.get("/new-customer");
 
   deals.value = res.data?.data || [];
 
-  // auto select kalau cuma 1
   if (!selectedDeal.value && deals.value.length === 1) {
     selectedDeal.value = deals.value[0];
   }
@@ -95,29 +84,6 @@ const removeExistingFile = (index) => {
   form.value.files.splice(index, 1);
 };
 
-const isSubmitting = ref(false);
-// const handleSubmit = async () => {
-//   const payload = new FormData();
-
-//   payload.append("deal_customer_id", selectedDeal.value.id);
-//   payload.append("id_customer", form.value.id_customer);
-
-//   payload.append("tanggal_lahir", form.value.tanggal_lahir);
-
-//   payload.append("keep_files", JSON.stringify(form.value.files));
-
-//   newFiles.value.forEach((f) => payload.append("files[]", f));
-
-//   if (isEditMode.value) {
-//     await api.post(`/customer-identities/${form.value.id}`, payload);
-//   } else {
-//     await api.post("/customer-identities", payload);
-//   }
-
-//   resetForm();
-//   showForm.value = false;
-//   loadIdentities();
-// };
 const handleSubmit = async () => {
   if (isSubmitting.value) return;
 
@@ -146,7 +112,6 @@ const handleSubmit = async () => {
     showForm.value = false;
     loadIdentities();
   } catch (e) {
-    console.error(e);
   } finally {
     isSubmitting.value = false;
   }
@@ -235,7 +200,6 @@ const confirmDelete = async () => {
     await loadIdentities();
     showDeleteModal.value = false;
   } catch (e) {
-    console.error(e);
   } finally {
     deleteLoading.value = false;
     deleteTargetId.value = null;
@@ -253,6 +217,16 @@ onMounted(() => {
   loadDeals();
   loadIdentities();
   birthdayStore.fetchToday();
+});
+
+const filteredDeals = computed(() => {
+  if (!searchCustomer.value) return deals.value;
+
+  const keyword = searchCustomer.value.toLowerCase();
+
+  return deals.value.filter((d) =>
+    (d.name ?? "").toLowerCase().includes(keyword)
+  );
 });
 </script>
 
@@ -297,7 +271,7 @@ onMounted(() => {
             @click="showCustomerModal = true"
             class="mt-2 w-full flex items-center justify-between p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
           >
-            <span class="text-sm text-gray-800 truncate">
+            <span class="text-base text-gray-800 truncate">
               {{ selectedDeal ? selectedDeal.name : "Select Customer" }}
             </span>
             <ChevronDown
@@ -433,12 +407,12 @@ onMounted(() => {
       <input
         v-model="search"
         placeholder="Search customer..."
-        class="flex-1 p-3 py-1 border border-slate-200 rounded-lg focus:outline-none placeholder:text-sm"
+        class="flex-1 border border-slate-300 rounded-lg px-4 py-1 focus:outline-none placeholder:text-sm"
       />
 
       <button
         @click="resetSearchWithAnimation"
-        class="flex items-center gap-2 px-6 py-2 font-medium rounded-lg bg-gray-200 hover:bg-gray-300 transition"
+        class="flex items-center gap-2 px-5 py-2 bg-indigo-700 text-white text-sm font-medium rounded-lg hover:bg-indigo-800 shadow-md transition"
       >
         <RotateCcw
           class="w-4 h-4 transition-transform"
@@ -466,81 +440,91 @@ onMounted(() => {
         </thead>
 
         <tbody>
+          <!-- LOADING (MENUTUP SEMUA DATA) -->
           <tr v-if="isLoading">
-            <td colspan="6" class="py-10">
-              <div class="flex justify-center">
+            <td colspan="8" class="py-12">
+              <div class="flex justify-center items-center gap-3">
                 <div
                   class="w-8 h-8 border-4 border-gray-300 border-t-indigo-600 rounded-full animate-spin"
                 ></div>
+                <span class="text-sm text-gray-500">Loading data...</span>
               </div>
             </td>
           </tr>
 
-          <tr
-            v-for="(item, index) in paginatedData"
-            :key="item.id"
-            class="border-t border-gray-200 hover:bg-gray-50 transition"
-          >
-            <td class="px-4 py-2 text-center">
-              <div class="flex justify-center gap-3">
-                <button
-                  @click="editItem(item)"
-                  class="text-orange-500 hover:text-orange-600 transition"
-                >
-                  <Pencil class="w-4 h-4" />
-                </button>
-                <button
-                  @click="deleteItem(item.id)"
-                  class="text-red-500 hover:text-red-600 transition"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            </td>
-            <td class="px-4 py-2 text-center">
-              {{ (currentPage - 1) * perPage + index + 1 }}
-            </td>
-            <td
-              class="px-4 py-2 text-center truncate font-medium text-gray-800"
+          <template v-else-if="paginatedData.length">
+            <tr
+              v-for="(item, index) in paginatedData"
+              :key="item.id"
+              class="border-t border-gray-200 hover:bg-gray-50 transition"
             >
-              {{ item.deal_customer?.new_customer?.name || "-" }}
-            </td>
-            <td class="px-4 py-2 text-center">
-              {{ item.deal_customer?.new_customer?.phone || "-" }}
-            </td>
-            <td class="px-4 py-2 text-center">
-              {{ displayValue(item.id_customer) }}
-            </td>
+              <td class="px-4 py-2 text-center">
+                <div class="flex justify-center gap-3">
+                  <button
+                    @click="editItem(item)"
+                    class="text-orange-500 hover:text-orange-600 transition"
+                  >
+                    <Pencil class="w-4 h-4" />
+                  </button>
+                  <button
+                    @click="deleteItem(item.id)"
+                    class="text-red-500 hover:text-red-600 transition"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
 
-            <td class="px-4 py-2 text-center">
-              {{ item.tanggal_lahir || "-" }}
-            </td>
-            <td class="px-4 py-2 text-center">
-              <span v-if="item.files?.length"
-                >{{ item.files.length || "-" }} file</span
+              <td class="px-4 py-2 text-center">
+                {{ (currentPage - 1) * perPage + index + 1 }}
+              </td>
+
+              <td
+                class="px-4 py-2 text-center truncate font-medium text-gray-800"
               >
-              <span v-else class="text-gray-400">-</span>
-            </td>
-            <td class="px-4 py-2 text-center">
-              <div class="flex justify-center gap-3">
-                <button
-                  @click="editItem(item)"
-                  class="text-orange-500 hover:text-orange-600 transition"
-                >
-                  <Pencil class="w-4 h-4" />
-                </button>
-                <button
-                  @click="deleteItem(item.id)"
-                  class="text-red-500 hover:text-red-600 transition"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            </td>
-          </tr>
+                {{ item.deal_customer?.new_customer?.name || "-" }}
+              </td>
 
-          <tr v-if="!isLoading && !paginatedData.length">
-            <td colspan="6" class="py-6 text-center text-gray-500">
+              <td class="px-4 py-2 text-center">
+                {{ item.deal_customer?.new_customer?.phone || "-" }}
+              </td>
+
+              <td class="px-4 py-2 text-center">
+                {{ displayValue(item.id_customer) }}
+              </td>
+
+              <td class="px-4 py-2 text-center">
+                {{ item.tanggal_lahir || "-" }}
+              </td>
+
+              <td class="px-4 py-2 text-center">
+                <span v-if="item.files?.length">
+                  {{ item.files.length }} file
+                </span>
+                <span v-else class="text-gray-400">-</span>
+              </td>
+
+              <td class="px-4 py-2 text-center">
+                <div class="flex justify-center gap-3">
+                  <button
+                    @click="editItem(item)"
+                    class="text-orange-500 hover:text-orange-600 transition"
+                  >
+                    <Pencil class="w-4 h-4" />
+                  </button>
+                  <button
+                    @click="deleteItem(item.id)"
+                    class="text-red-500 hover:text-red-600 transition"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+
+          <tr v-else>
+            <td colspan="8" class="py-8 text-center text-gray-500">
               Data not found
             </td>
           </tr>
@@ -583,30 +567,63 @@ onMounted(() => {
         class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center"
       >
         <div
-          class="bg-white rounded-xl w-full max-w-md shadow-lg overflow-hidden"
+          class="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden"
         >
           <div
-            class="flex justify-between items-center p-4 border-b border-gray-200"
+            class="flex justify-between items-center px-5 py-4 border-b border-slate-200"
           >
-            <h3 class="font-semibold text-gray-800">Select Customer</h3>
+            <h3 class="font-semibold text-black text-base">Select Customer</h3>
             <button @click="showCustomerModal = false">
-              <X class="w-5 h-5 text-gray-800" />
+              <X class="w-5 h-5 text-slate-600 hover:text-slate-800" />
             </button>
           </div>
 
-          <div class="max-h-80 overflow-y-auto">
+          <div class="px-5 py-3 border-slate-200">
+            <input
+              v-model="searchCustomer"
+              type="text"
+              placeholder="Search customer..."
+              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none"
+            />
+          </div>
+
+          <TransitionGroup
+            tag="div"
+            name="list"
+            class="max-h-80 overflow-y-auto hidden-scroll"
+          >
             <button
-              v-for="d in deals"
+              v-for="d in filteredDeals"
               :key="d.id"
               @click="
                 selectedDeal = d;
                 showCustomerModal = false;
+                searchCustomer = '';
               "
-              class="w-full text-left px-4 py-3 hover:bg-gray-50 transition"
+              class="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition group"
             >
-              {{ d.name }}
+              <div
+                class="shrink-0 w-9 h-9 rounded-full bg-blue-100 text-indigo-600 flex items-center justify-center font-semibold text-sm uppercase"
+              >
+                {{ d.name?.charAt(0) || "?" }}
+              </div>
+
+              <div class="flex-1 text-left">
+                <p class="text-sm font-medium text-slate-800">
+                  {{ d.name || "-" }}
+                </p>
+                <p class="text-xs text-slate-400">Customer</p>
+              </div>
             </button>
-          </div>
+
+            <p
+              v-if="filteredDeals.length === 0"
+              key="empty"
+              class="text-center text-slate-400 py-6 text-sm"
+            >
+              Customer not found
+            </p>
+          </TransitionGroup>
         </div>
       </div>
     </Transition>
@@ -645,5 +662,20 @@ onMounted(() => {
 
 .rotate-animation {
   animation: rotateAnim 0.6s ease-in-out;
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.2s ease;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 </style>

@@ -22,7 +22,6 @@ const loading = ref(false);
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-// Reset all page
 onMounted(() => {
   email.value = "";
   password.value = "";
@@ -36,13 +35,11 @@ onMounted(() => {
 const login = async () => {
   loading.value = true;
 
-  // Reset error and modal
   emailError.value = "";
   passwordError.value = "";
   modalMsg.value = "";
   modalType.value = "";
 
-  // Validasi input
   if (!email.value) emailError.value = "Email wajib diisi!";
   else if (!validateEmail(email.value)) emailError.value = "Email tidak valid!";
 
@@ -57,7 +54,6 @@ const login = async () => {
   }
 
   try {
-    // Login to Pinia auth store
     await auth.login({
       email: email.value,
       password: password.value,
@@ -97,9 +93,8 @@ const login = async () => {
     class="relative container mx-auto flex items-center justify-center min-h-screen px-2 bg-cover bg-center bg-no-repeat"
     :style="{ backgroundImage: `url(${BgAuth})` }"
   >
-    <!-- Overlay -->
     <div class="absolute inset-0 bg-black/60"></div>
-    <!-- Modal -->
+
     <transition name="modal-fade">
       <div
         v-if="showModal"
@@ -199,7 +194,7 @@ const login = async () => {
   <LoadingSpinner v-if="loading" />
 </template>
 
-<style>
+<style scoped>
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;

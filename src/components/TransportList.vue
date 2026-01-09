@@ -44,7 +44,6 @@ const fetchTransport = async () => {
     transportList.value = res.data.data || [];
     currentPage.value = 1;
   } catch (err) {
-    console.error(err);
     showAlert("Gagal mengambil data transport");
   } finally {
     isLoading.value = false;
@@ -63,7 +62,7 @@ const toggleTable = async () => {
 
 const resetTransport = () => {
   isRotating.value = true;
-  setTimeout(() => (isRotating.value = false), 600); // animasi rotate
+  setTimeout(() => (isRotating.value = false), 600);
 
   guideInput.value = "";
   driverInput.value = "";
@@ -153,16 +152,19 @@ const nextPage = () => {
 
     <div v-if="isTableVisible" class="overflow-x-auto">
       <div v-if="isLoading" class="flex justify-center py-10">
-        <div
-          class="w-8 h-8 border-4 border-slate-300 border-t-blue-700 rounded-full animate-spin"
-        ></div>
+        <div class="flex justify-center items-center gap-3">
+          <div
+            class="w-8 h-8 border-4 border-gray-300 border-t-indigo-600 rounded-full animate-spin"
+          ></div>
+          <span class="text-sm text-gray-500">Loading data...</span>
+        </div>
       </div>
 
       <table
         v-else-if="transportList.length"
         class="min-w-full bg-white rounded-md overflow-hidden divide-y divide-indigo-100"
       >
-        <thead class="bg-indigo-50">
+        <thead class="bg-indigo-700 text-white sticky top-0 z-10">
           <tr>
             <th class="px-4 py-2 text-left text-sm font-semibold">No</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Guide</th>

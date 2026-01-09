@@ -1,36 +1,52 @@
 import { useAuthStore } from "../stores/auth";
 
-export function authGuard(to, from) {
+export function authGuard(to) {
   const auth = useAuthStore();
   const user = auth.user;
 
   if (!user) {
+    if (to.path.startsWith("/dashboard-driver")) {
+      return { path: "/login-driver" };
+    }
+
     if (to.path.startsWith("/dashboard")) {
       return { path: "/login-admin" };
     }
 
-    if (to.meta.allowedRoles?.includes("pic") || to.meta.allowedRoles?.includes("staff")) {
-      return { path: "/login-pic-staff" };
-    }
-
-    if (to.meta.allowedRoles?.includes("admin")) {
-      return { path: "/login-admin" };
-    }
-
-    if (to.meta.allowedRoles?.includes("super_admin")) {
-      return { path: "/login-super-admin" };
-    }
-
-    // Fallback
-    return { path: "/login-admin" };
+    return;
   }
 
 
-  const role = user.role;
-  if (to.meta.allowedRoles && !to.meta.allowedRoles.includes(role)) {
-    alert("Anda tidak memiliki akses ke halaman ini");
-    return false;
+  const mainRole = user.role;
+  const extraRoles = user.extra_roles || [];
+  const roles = [mainRole, ...extraRoles];
+
+  const isDriver = roles.includes("driver");
+  const isAdmin = ["admin", "super_admin"].includes(mainRole);
+
+
+  if (isDriver && !isAdmin) {
+    
+    if (to.path.startsWith("/dashboard") && !to.path.startsWith("/dashboard-driver")) {
+      return { path: "/dashboard-driver/listing" };
+    }
+
+   
+    if (
+      ["/login-admin", "/login-super-admin", "/login-pic-staff", "/register-pic-staff"].includes(to.path)
+    ) {
+      return { path: "/dashboard-driver/listing" };
+    }
   }
 
-  return true;
+
+  if (to.meta?.allowedRoles) {
+    const allowed = to.meta.allowedRoles;
+    const hasAccess = allowed.some((r) => roles.includes(r));
+
+    if (!hasAccess) {
+      return false; 
+    }
+  }
+
 }

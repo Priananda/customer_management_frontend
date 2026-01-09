@@ -53,7 +53,7 @@ const summary = ref({
   onProgress: 0,
   deal: 0,
   canceled: 0,
-  waiting: 0,
+  postpone: 0,
   todayCount: 0,
 });
 
@@ -63,7 +63,6 @@ const getNewCustomers = async () => {
     const res = await api.get("/new-customer");
     newCustomers.value = res.data.data;
   } catch (err) {
-    console.error(err);
   } finally {
     loading.value = false;
   }
@@ -73,12 +72,9 @@ const getSummary = async () => {
   try {
     const res = await api.get("/new-customer/summary");
     summary.value = res.data.data;
-  } catch (err) {
-    console.error(err);
-  }
+  } catch (err) {}
 };
 
-// Data perbulan
 const month = ref("");
 const year = ref("");
 const filterMonth = ref("");
@@ -140,7 +136,6 @@ const filteredCustomers = computed(() => {
         })()
       : true;
 
-    // Data perbulan
     const matchesMonth = filterMonth.value
       ? (() => {
           const filter = filterMonth.value;
@@ -194,7 +189,6 @@ const onlyDate = (dateStr) => {
   return `${d.getFullYear()}-${month}-${day}`;
 };
 
-// Data perbulan
 const getMonth = (date) => {
   if (!date) return null;
   return date.slice(0, 7);
@@ -222,7 +216,6 @@ function nextPage() {
   }
 }
 
-// Data perbulan
 watch(
   [
     searchKeyword,
@@ -246,7 +239,6 @@ const uniqueSegmens = computed(() => {
   return [...seg];
 });
 
-// Data perbulan
 const isRotating = ref(false);
 const resetFilters = () => {
   isRotating.value = true;
@@ -270,6 +262,7 @@ function handleClickOutside(e) {
     showProgressDropdown.value = false;
   if (segmen && !segmen.contains(e.target)) showSegmenDropdown.value = false;
 }
+
 function closeAllDropdowns() {
   showProgressDropdown.value = false;
   showSegmenDropdown.value = false;
@@ -281,7 +274,7 @@ const progressColor = (progress) => {
     return "bg-green-100 text-green-800 border border-green-200";
   if (p === "on progress")
     return "bg-blue-100 text-blue-800 border border-blue-200";
-  if (p === "waiting")
+  if (p === "postpone")
     return "bg-yellow-100 text-yellow-800 border border-yellow-200";
   if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
   return "bg-slate-100 text-slate-700 border border-slate-200";
@@ -324,9 +317,7 @@ const downloadTodayPdf = async () => {
     link.click();
 
     window.URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error("Download PDF failed:", err);
-  }
+  } catch (err) {}
 };
 
 const handleDownloadClick = async () => {
@@ -377,7 +368,6 @@ const filterBySummary = async (status) => {
   });
 };
 
-// Data perbulan
 const showMonthModal = ref(false);
 const showYearModal = ref(false);
 const months = [
@@ -410,6 +400,31 @@ watch([month, year], ([m, y]) => {
     filterMonth.value = "";
   }
 });
+
+const tableWrapper = ref(null);
+const isDragging = ref(false);
+const startX = ref(0);
+const scrollLeft = ref(0);
+const startDrag = (e) => {
+  isDragging.value = true;
+  tableWrapper.value.classList.add("cursor-grabbing");
+
+  startX.value = e.pageX - tableWrapper.value.offsetLeft;
+  scrollLeft.value = tableWrapper.value.scrollLeft;
+};
+const stopDrag = () => {
+  isDragging.value = false;
+  tableWrapper.value.classList.remove("cursor-grabbing");
+};
+const onDrag = (e) => {
+  if (!isDragging.value) return;
+
+  e.preventDefault();
+
+  const x = e.pageX - tableWrapper.value.offsetLeft;
+  const walk = (x - startX.value) * 1.5;
+  tableWrapper.value.scrollLeft = scrollLeft.value - walk;
+};
 </script>
 
 <template>
@@ -477,15 +492,15 @@ watch([month, year], ([m, y]) => {
         <p class="text-sm">Closed successfully</p>
       </RouterLink>
 
-      <!-- Waiting -->
+      <!-- PostPone -->
       <div
-        @click="filterBySummary('waiting')"
+        @click="filterBySummary('postpone')"
         class="bg-linear-to-br from-yellow-400/90 to-amber-500/90 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
       >
         <Clock class="w-6 h-6 text-white mb-1" />
-        <p class="font-medium text-md">Waiting</p>
-        <h3 class="text-2xl font-bold">{{ summary.waiting }}</h3>
-        <p class="text-sm">Awaiting response</p>
+        <p class="font-medium text-md">PostPone</p>
+        <h3 class="text-2xl font-bold">{{ summary.postpone }}</h3>
+        <p class="text-sm">Postponed by customer</p>
       </div>
 
       <!-- Canceled -->
@@ -546,7 +561,6 @@ watch([month, year], ([m, y]) => {
       </div>
 
       <div class="grid grid-cols-5 gap-3">
-        <!-- BULAN -->
         <button
           @click="showMonthModal = true"
           class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -560,7 +574,6 @@ watch([month, year], ([m, y]) => {
           </span>
         </button>
 
-        <!-- TAHUN  -->
         <button
           @click="showYearModal = true"
           class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -575,7 +588,6 @@ watch([month, year], ([m, y]) => {
         </button>
       </div>
 
-      <!-- MODAL BULAN -->
       <div
         v-if="showMonthModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -584,7 +596,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showMonthModal = false"
@@ -607,7 +618,6 @@ watch([month, year], ([m, y]) => {
         </div>
       </div>
 
-      <!-- MODAL TAHUN -->
       <div
         v-if="showYearModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -616,7 +626,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showYearModal = false"
@@ -662,7 +671,6 @@ watch([month, year], ([m, y]) => {
             v-if="showProgressDropdown"
             class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            <!-- ALL -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="
@@ -677,7 +685,6 @@ watch([month, year], ([m, y]) => {
               </span>
             </div>
 
-            <!-- ON PROGRESS -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
@@ -692,7 +699,6 @@ watch([month, year], ([m, y]) => {
               </span>
             </div>
 
-            <!-- DEAL -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
@@ -707,22 +713,20 @@ watch([month, year], ([m, y]) => {
               </span>
             </div>
 
-            <!-- WAITING -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
-                filterProgress = 'waiting';
+                filterProgress = 'postpone';
                 showProgressDropdown = false;
               "
             >
               <span
                 class="inline-flex w-[130px] justify-center px-2 py-1 text-xs rounded-full font-medium border bg-yellow-100 text-yellow-800 border-yellow-200"
               >
-                Waiting
+                Postpone
               </span>
             </div>
 
-            <!-- CANCELED -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex"
               @click="
@@ -788,7 +792,6 @@ watch([month, year], ([m, y]) => {
         </transition>
       </div>
 
-      <!-- Reset -->
       <button
         @click="resetFilters"
         class="cursor-pointer flex items-center justify-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition"
@@ -803,7 +806,12 @@ watch([month, year], ([m, y]) => {
 
     <!-- Table -->
     <div
-      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+      ref="tableWrapper"
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll cursor-grab select-none"
+      @mousedown="startDrag"
+      @mouseup="stopDrag"
+      @mouseleave="stopDrag"
+      @mousemove="onDrag"
     >
       <table
         ref="tableSection"
@@ -1082,7 +1090,7 @@ watch([month, year], ([m, y]) => {
 
               <span v-else>-</span>
             </td>
-            <!-- HOTEL MODAL -->
+            <!-- Hotel Modal -->
             <Transition
               enter-active-class="transition duration-200 ease-out"
               enter-from-class="opacity-0 scale-95"
@@ -1093,7 +1101,7 @@ watch([month, year], ([m, y]) => {
             >
               <div
                 v-if="showHotelModal"
-                class="px-2 fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                class="px-2 fixed inset-0 z-50 flex items-center justify-center bg-black/10"
                 @click.self="closeHotelModal"
               >
                 <!-- Modal Card -->

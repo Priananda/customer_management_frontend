@@ -60,7 +60,11 @@ const pageSize = ref(10);
 const totalItems = ref(0);
 
 const customerSearch = ref("");
-const focusInputSearch = ref(false);
+
+const showEditCountryModal = ref(false);
+const newEditCountryInput = ref("");
+const newEditCountryCategory = ref("");
+const showEditCategoryDropdown = ref(false);
 
 const editFormNewCustomer = ref({
   date: "",
@@ -78,7 +82,7 @@ const editFormNewCustomer = ref({
   hotel: [""],
   notes: "",
 });
-// FITUR RESERVASI
+
 const dealForm = ref({
   id: null,
   new_customer_id: "",
@@ -104,17 +108,11 @@ const dealForm = ref({
 
   reservations: [
     {
-      // HOTEL
+      tour_plan: "",
       phone_hotel: "",
       lokasi_hotel: "",
-
-      // LUNCH multiple
       lunches: [{ lunch: "", phone: "", lokasi: "" }],
-
-      // DINNER multiple
       dinners: [{ dinner: "", phone: "", lokasi: "" }],
-
-      // ACTIVITY multiple
       activities: [{ activity: "", phone: "", lokasi: "" }],
     },
   ],
@@ -143,13 +141,6 @@ const progressOptions = [
     color: "bg-red-100 text-red-800 border border-red-200",
   },
 ];
-
-const showCountryDropdown = ref(false);
-
-const showEditCountryModal = ref(false);
-const newEditCountryInput = ref("");
-const newEditCountryCategory = ref("");
-const showEditCategoryDropdown = ref(false);
 
 const countryCategories = ref({
   Asia: ["India", "China", "Japan", "Korea Selatan"],
@@ -233,24 +224,21 @@ const showDeleteModal = ref(false);
 const selectedId = ref(null);
 const deleteType = ref(null);
 const deletedDealCustomerIds = ref(
-  JSON.parse(localStorage.getItem("deletedDealCustomerIds") || "[]")
+  JSON.parse(sessionStorage.getItem("deletedDealCustomerIds") || "[]")
 );
 
 const loadData = async () => {
   loading.value = true;
   try {
-    // Ambil data dari API
     const [ncRes, dcRes] = await Promise.all([
       api.get("/new-customer"),
       api.get("/deal-customer"),
     ]);
 
-    // Simpan hasil GET ke state
     newCustomers.value = ncRes.data?.data || [];
     deals.value = dcRes.data?.data || [];
     deletedDealCustomerIds.value = dcRes.data?.deleted_new_customer_ids || [];
 
-    // Gabungkan data new_customer dan deal_customer
     combinedData.value = newCustomers.value
       .filter((nc) => nc.progress?.toLowerCase() === "deal")
       .map((nc) => {
@@ -293,13 +281,6 @@ const loadData = async () => {
   }
 };
 
-const onSelectCustomer = () => {
-  selectedCustomer.value = newCustomers.value.find(
-    (c) => Number(c.id) === Number(dealForm.value.new_customer_id)
-  );
-};
-
-// FITUR RESERVASI
 const addTransport = () => {
   dealForm.value.transport.push({
     guide: "",
@@ -311,25 +292,17 @@ const addTransport = () => {
     foto: [],
   });
 };
-// FITUR RESERVASI
+
+const deletedTransportIds = ref([]);
 const removeTransport = (index) => {
+  const tr = dealForm.value.transport[index];
+  if (tr?.id) {
+    deletedTransportIds.value.push(tr.id);
+  }
+
   dealForm.value.transport.splice(index, 1);
 };
 
-// FITUR RESERVASI
-// const addReservation = () => {
-//   if (!Array.isArray(dealForm.value.reservations)) {
-//     dealForm.value.reservations = [];
-//   }
-//   dealForm.value.reservations.push({
-//     phone_hotel: "",
-//     lokasi_hotel: "",
-//     lunches: [],
-//     dinners: [],
-//     activities: [],
-//   });
-// };
-// FITUR RESERVASI
 const showDateAlert = reactive({ reservation: false });
 const addReservation = () => {
   const checkIn =
@@ -340,7 +313,6 @@ const addReservation = () => {
   if (!checkIn || !checkOut) {
     showDateAlert.reservation = true;
 
-    // hide alert setelah 3 detik
     setTimeout(() => {
       showDateAlert.reservation = false;
     }, 3000);
@@ -350,6 +322,7 @@ const addReservation = () => {
     dealForm.value.reservations = [];
   }
   dealForm.value.reservations.push({
+    tour_plan: "",
     phone_hotel: "",
     lokasi_hotel: "",
     lunches: [],
@@ -359,7 +332,6 @@ const addReservation = () => {
   });
 };
 
-// FITUR RESERVASI
 const deletedReservationIds = ref([]);
 const removeReservation = (index) => {
   const removed = dealForm.value.reservations.splice(index, 1)[0];
@@ -367,33 +339,32 @@ const removeReservation = (index) => {
     deletedReservationIds.value.push(removed.id);
   }
 };
-// FITUR RESERVASI
+
 const addLunch = (resIndex) => {
   const res = dealForm.value.reservations[resIndex];
   if (!Array.isArray(res.lunches)) res.lunches = [];
   res.lunches.push({ name: "", phone: "", location: "" });
 };
-// FITUR RESERVASI
+
 const addDinner = (resIndex) => {
   const res = dealForm.value.reservations[resIndex];
   if (!Array.isArray(res.dinners)) res.dinners = [];
   res.dinners.push({ name: "", phone: "", location: "" });
 };
-// FITUR RESERVASI
+
 const addActivity = (resIndex) => {
   const res = dealForm.value.reservations[resIndex];
   if (!Array.isArray(res.activities)) res.activities = [];
   res.activities.push({ name: "", phone: "", location: "" });
 };
-// FITUR RESERVASI
+
 const removeItem = (resIndex, type, index) => {
   const arr = dealForm.value.reservations[resIndex][type];
   if (!Array.isArray(arr)) return;
   arr.splice(index, 1);
 };
-// FITUR RESERVASI
+
 const handleSave = async () => {
-  //  VALIDASI: pastikan ada new_customer_id
   if (!dealForm.value.new_customer_id) {
     alertType.value = "error";
     alertMessage.value = "Pilih customer terlebih dahulu.";
@@ -405,12 +376,11 @@ const handleSave = async () => {
   isLoading.value = true;
   const fd = new FormData();
 
-  // 1. NEW CUSTOMER UPDATE
+  // 1. Data New Customer
   if (editFormNewCustomer.value) {
     Object.keys(editFormNewCustomer.value).forEach((key) => {
       let val = editFormNewCustomer.value[key];
 
-      // convert hotel array jadi string
       if (key === "hotel" && Array.isArray(val)) val = val.join(",");
 
       if (val !== null && val !== undefined && typeof val !== "object") {
@@ -421,15 +391,15 @@ const handleSave = async () => {
 
   fd.append("new_customer_id", dealForm.value.new_customer_id);
 
-  // 2. DATA DEAL CUSTOMER
+  // 2. Data Deal Customer
   Object.keys(dealForm.value).forEach((key) => {
     const val = dealForm.value[key];
-    if (key === "transport") return; // handle transport terpisah
+    if (key === "transport") return;
     if (key === "payment_status" && !val) return;
     if (val !== null && val !== undefined) fd.append(key, String(val));
   });
 
-  // 3. TRANSPORT + FILE
+  // 3.Data Transport + File
   dealForm.value.transport.forEach((tr, i) => {
     fd.append(`transport[${i}][id]`, tr.id ?? "");
     fd.append(`transport[${i}][guide]`, tr.guide ?? "");
@@ -450,9 +420,6 @@ const handleSave = async () => {
     });
   });
 
-  // const reservations = Array.isArray(dealForm.value.reservations)
-  //   ? dealForm.value.reservations
-  //   : [dealForm.value.reservations];
   const reservations = (
     Array.isArray(dealForm.value.reservations)
       ? dealForm.value.reservations
@@ -462,6 +429,7 @@ const handleSave = async () => {
   reservations.forEach((res, i) => {
     if (res.id) fd.append(`reservation[${i}][id]`, res.id); // <-- ID lama
 
+    fd.append(`reservation[${i}][tour_plan]`, res.tour_plan ?? "");
     fd.append(`reservation[${i}][phone_hotel]`, res.phone_hotel ?? "");
     fd.append(`reservation[${i}][lokasi_hotel]`, res.lokasi_hotel ?? "");
     fd.append(`reservation[${i}][lunch]`, JSON.stringify(res.lunches || []));
@@ -472,14 +440,18 @@ const handleSave = async () => {
     );
   });
 
-  // Kirim deletedReservationIds ke backend
   deletedReservationIds.value.forEach((id) => {
     fd.append("deleted_reservation_ids[]", id);
   });
 
-  // 4. FILE DEAL CUSTOMER TAMBAHAN
+  // 4. File deal customer
   dealSelectedFiles.value.forEach((file) => {
     fd.append("files[]", file);
+  });
+
+  // 5. Data Transport
+  deletedTransportIds.value.forEach((id) => {
+    fd.append("deleted_transport_ids[]", id);
   });
 
   try {
@@ -498,6 +470,7 @@ const handleSave = async () => {
       );
     }
 
+    selectedDeal.value = res.data.data;
     dealSelectedFiles.value = [];
 
     const files = await loadFiles(
@@ -511,14 +484,11 @@ const handleSave = async () => {
       behavior: "smooth",
     });
 
-    // Langsung update preview modal
     modalFiles.value = files;
     showFileModal.value = false;
 
     isEditing.value = false;
-    console.log("response:", res.data);
   } catch (error) {
-    console.error("error:", error?.response?.data || error);
     alert("Gagal menyimpan deal customer");
   } finally {
     isLoading.value = false;
@@ -529,71 +499,40 @@ const handleSave = async () => {
 const confirmDelete = async () => {
   try {
     let row;
-    // Cek sebelum melakukan delete
-    console.log("Delete type:", deleteType.value);
-    console.log("Selected ID:", selectedId.value);
-    console.log("combinedData before delete:", combinedData.value);
-
-    // Hapus data di backend
     if (deleteType.value === "deal") {
-      // Hapus deal di backend
       const response = await api.delete(`/deal-customer/${selectedId.value}`);
 
-      // Cek response dari API
-      console.log("Response from deleting deal customer:", response);
       if (response.status === 200) {
-        // Temukan row yang dihapus dan hapus data dari combinedData (frontend)
         row = combinedData.value.find(
           (r) => r.deal_customer?.id === selectedId.value
         );
 
-        console.log("Row to be deleted:", row);
-
         if (row?.new_customer?.id) {
           deletedDealCustomerIds.value.push(row.new_customer.id);
-          localStorage.setItem(
+          sessionStorage.setItem(
             "deletedDealCustomerIds",
             JSON.stringify(deletedDealCustomerIds.value)
           );
-          console.log(
-            "Deleted Deal Customer IDs stored:",
-            deletedDealCustomerIds.value
-          );
         }
 
-        // Hapus row dari combinedData
         combinedData.value = combinedData.value.filter(
           (r) => r.deal_customer?.id !== selectedId.value
         );
-        console.log("combinedData after delete deal:", combinedData.value);
       }
     } else {
-      // Hapus new customer di backend
       const response = await api.delete(`/new-customer/${selectedId.value}`);
 
-      // Cek response dari API
-      console.log("Response from deleting new customer:", response);
       if (response.status === 200) {
-        // Hapus row dari combinedData
         combinedData.value = combinedData.value.filter(
           (r) => r.new_customer?.id !== selectedId.value
-        );
-        console.log(
-          "combinedData after delete new customer:",
-          combinedData.value
         );
       }
     }
 
-    // Update modal dan beri feedback ke user
     showDeleteModal.value = false;
-    console.log("Delete modal closed:", showDeleteModal.value);
 
-    // Opsional: hanya jika kamu butuh sinkronisasi data dengan backend setelah dihapus
     await loadData();
-    console.log("Data reloaded from backend");
   } catch (error) {
-    console.error("confirmDelete error:", error);
     alert("Gagal menghapus data.");
   }
 };
@@ -630,7 +569,6 @@ const reset = () => {
 };
 onMounted(loadData);
 
-// Data perbulan
 const formatDate = (dateStr) => dateStr?.substring(0, 10) || "";
 const month = ref("");
 const year = ref("");
@@ -701,7 +639,7 @@ const filteredDeals = computed(() => {
       ? (customerDealFields + " " + transportFields).includes(keyword)
       : true;
 
-    // 4. Filter lain: date, progress, segmen
+    // 4. Filter: date, progress, segmen
     const matchesDate = dateFilter
       ? (() => {
           const filter = dateFilter;
@@ -713,14 +651,14 @@ const filteredDeals = computed(() => {
             return filter >= checkIn && filter <= checkOut;
           }
 
-          // fallback untuk tanggal tunggal
+          // fallback for single date
           return [formatDate(c.date)].includes(filter);
         })()
       : true;
 
     const matchesMonth = filterMonth.value
       ? (() => {
-          const filter = filterMonth.value; // format YYYY-MM
+          const filter = filterMonth.value;
           const checkInMonth = c.check_in?.substring(0, 7);
           const checkOutMonth = c.check_out?.substring(0, 7);
           const dateMonth = c.date?.substring(0, 7);
@@ -761,7 +699,6 @@ const filteredDeals = computed(() => {
   return result;
 });
 
-// Data perbulan
 watch(
   [searchKeyword, filterMonth, filterDate, filterProgress, selectedSegmen],
   () => {
@@ -769,11 +706,9 @@ watch(
   }
 );
 
-// Data perbulan
 watch([month, year], ([m, y]) => {
   if (m && y) {
     filterMonth.value = `${y}-${m}`;
-    // Kombinasi bulan + tahun → trigger loading sekali
     isFiltering.value = true;
     nextTick(() => {
       setTimeout(() => {
@@ -781,7 +716,6 @@ watch([month, year], ([m, y]) => {
       }, 700);
     });
   } else if (y && !m) {
-    // Hanya tahun dipilih → trigger loading
     filterMonth.value = "";
     isFiltering.value = true;
     nextTick(() => {
@@ -790,7 +724,6 @@ watch([month, year], ([m, y]) => {
       }, 700);
     });
   } else {
-    // Hanya bulan dipilih → tidak ada loading
     filterMonth.value = "";
   }
 });
@@ -804,7 +737,6 @@ const uniqueSegmens = computed(() => {
   return Array.from(seg);
 });
 
-// Data perbulan
 const isRotating = ref(false);
 const resetFilters = () => {
   isRotating.value = true;
@@ -820,7 +752,7 @@ const resetFilters = () => {
   filterProgress.value = "all";
   selectedSegmen.value = "all";
 };
-// Data perbulan
+
 const getMonth = (date) => {
   if (!date) return null;
   return date.slice(0, 7);
@@ -870,7 +802,7 @@ const progressColor = (status) => {
     case "FOLLOWUP":
       return "bg-yellow-200 text-yellow-800 border border-yellow-200";
 
-    case "WAITING":
+    case "POSTPONE":
       return "bg-yellow-100 text-yellow-800 border border-yellow-200";
 
     case "PROSPECT":
@@ -938,10 +870,6 @@ const paginatedDataCustomers = computed(() => {
   return list.slice(start, start + pageSize.value);
 });
 
-watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
-  currentPage.value = 1;
-});
-
 const openDeleteModal = (row) => {
   if (row.deal_customer?.id) {
     deleteType.value = "deal";
@@ -950,7 +878,6 @@ const openDeleteModal = (row) => {
     deleteType.value = "customer";
     selectedId.value = row.new_customer.id;
   } else {
-    console.error(" Tidak ada ID yang bisa dihapus");
     return;
   }
   showDeleteModal.value = true;
@@ -966,7 +893,7 @@ const filteredCustomers = computed(() => {
   );
 });
 
-// MULAI DARI SINI FITUR UPLOAD FILE DEAL CUSTOMER + RELASI NEW CUSTOMER
+// Fitur Upload file deal customer & relasi new customer
 const allFiles = ref([]);
 const dealSelectedFiles = ref([]);
 const API_BASE = "http://127.0.0.1:8000";
@@ -978,7 +905,6 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
     let dealFilesApi = [];
     let newFilesApi = [];
 
-    // --- 1. Load new customer files ---
     if (newCustomerId) {
       const newRes = await api.get(`/customer-files/${newCustomerId}`);
       newFilesApi = (newRes.data.files ?? []).map((f) => ({
@@ -1004,8 +930,7 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
         }));
     }
 
-    // --- 3. FILTER hanya jika file DEAL punya nama sama
-    //     dan PREVIEW URL-nya juga sama (benar-benar file yang sama)
+    // Filter only if deal files have the same name
     const filteredDealFiles = dealFilesApi.filter((df) => {
       return !newFilesApi.some(
         (nf) =>
@@ -1014,32 +939,26 @@ const loadFiles = async (dealCustomerId, newCustomerId) => {
       );
     });
 
-    // --- 4. Gabungkan ---
+    // Merge
     allFiles.value = [...newFilesApi, ...filteredDealFiles].filter(
       (f) => f.source !== "transport"
     );
-  } catch (err) {
-    console.error("Load files failed:", err);
-  }
+  } catch (err) {}
 };
 
 const removeDealFile = async (file) => {
   if (!file?.id || file.source !== "deal_customer") return;
 
-  // if (!confirm("Yakin ingin menghapus file ini?")) return;
-
   try {
     await api.delete(`/deal-customer-files/${file.id.replace("dc-", "")}`);
     allFiles.value = allFiles.value.filter((f) => f.id !== file.id);
-  } catch (e) {
-    console.error("Delete failed:", e);
-  }
+  } catch (e) {}
 };
+
 const isDealFile = (file) => {
   return String(file.source).trim() === "deal_customer";
 };
 
-// FITUR RESERVASI
 const editDeal = (d) => {
   isEditing.value = true;
 
@@ -1106,58 +1025,6 @@ const editDeal = (d) => {
     notes: d.new_customer?.notes ?? "",
   };
 
-  // const start = d.new_customer?.check_in;
-  // const end = d.new_customer?.check_out;
-
-  // if (start && end) {
-  //   const startDate = new Date(start);
-  //   const endDate = new Date(end);
-
-  //   const dateArray = [];
-  //   let current = new Date(startDate);
-  //   while (current < endDate) {
-  //     dateArray.push(new Date(current));
-  //     current.setDate(current.getDate() + 1);
-  //   }
-
-  //   const oldReservations = d.deal_customer?.reservation || [];
-
-  //   // buat map supaya gampang dicocokkan, misal pakai tanggal lama atau index
-  //   const oldMap = oldReservations.reduce((acc, r) => {
-  //     // bisa tambahkan logika tanggal di backend kalau ada field date
-  //     acc[r.id] = r;
-  //     return acc;
-  //   }, {});
-
-  //   dealForm.value.reservations = dateArray.map((date, index) => {
-  //     const dateStr = date.toISOString().split("T")[0];
-
-  //     // ambil reservation lama jika ada, urut berdasarkan index
-  //     const old = oldReservations[index];
-
-  //     return old
-  //       ? {
-  //           id: old.id,
-  //           phone_hotel: old.phone_hotel ?? "",
-  //           lokasi_hotel: old.lokasi_hotel ?? "",
-  //           lunches: old.lunch ? JSON.parse(old.lunch) : [],
-  //           dinners: old.dinner ? JSON.parse(old.dinner) : [],
-  //           activities: old.activity ? JSON.parse(old.activity) : [],
-  //           date: dateStr,
-  //         }
-  //       : {
-  //           id: null,
-  //           phone_hotel: "",
-  //           lokasi_hotel: "",
-  //           lunches: [],
-  //           dinners: [],
-  //           activities: [],
-  //           date: dateStr,
-  //         };
-  //   });
-  // }
-
-  // --- Reservation otomatis berdasarkan check-in / check-out ---
   const start = d.new_customer?.check_in;
   const end = d.new_customer?.check_out;
 
@@ -1167,7 +1034,8 @@ const editDeal = (d) => {
 
     const dateArray = [];
     let current = new Date(startDate);
-    while (current < endDate) {
+
+    while (current <= endDate) {
       dateArray.push(new Date(current));
       current.setDate(current.getDate() + 1);
     }
@@ -1178,29 +1046,30 @@ const editDeal = (d) => {
     dealForm.value.reservations = dateArray.map((date, index) => {
       const dateStr = date.toISOString().split("T")[0];
 
-      // ambil reservation lama jika ada, urut berdasarkan index
       const old = oldReservations[index];
 
       return old
         ? {
             id: old.id,
+            tour_plan: old.tour_plan ?? "",
             phone_hotel: old.phone_hotel ?? "",
             lokasi_hotel: old.lokasi_hotel ?? "",
             lunches: old.lunch ? JSON.parse(old.lunch) : [],
             dinners: old.dinner ? JSON.parse(old.dinner) : [],
             activities: old.activity ? JSON.parse(old.activity) : [],
             date: dateStr,
-            guest_name: guestName, // <-- tambah field guest_name
+            guest_name: guestName,
           }
         : {
             id: null,
+            tour_plan: "",
             phone_hotel: "",
             lokasi_hotel: "",
             lunches: [],
             dinners: [],
             activities: [],
             date: dateStr,
-            guest_name: guestName, // <-- tambah field guest_name
+            guest_name: guestName,
           };
     });
   }
@@ -1224,29 +1093,22 @@ const removeEditHotel = (index) => {
   }
 };
 
-// // file yang sudah ada (backend)
-// const dealExistingFiles = ref([]);
-
-// Saat memilih file baru
 const showDealAlert = ref(false);
 const dealAlertMessage = ref("");
 const handleDealFileChange = (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
 
-  // Hanya simpan file ke array, jangan upload dulu
   dealSelectedFiles.value.push(...files);
 
-  // reset input supaya bisa upload file sama lagi
   e.target.value = "";
 };
 
-// Hapus file yang baru dipilih (belum diupload)
 const removeDealSelectedFile = (index) => {
   dealSelectedFiles.value.splice(index, 1);
 };
 
-// DOWLOAD + MODAL + GABUNG NEW & DEAL
+// Dowload & Modal & Merge New Deal
 const showFileModal = ref(false);
 const modalFiles = ref([]);
 const openFilePreview = async (dealId) => {
@@ -1263,7 +1125,6 @@ const openFilePreview = async (dealId) => {
     modalFiles.value = Array.isArray(res?.data?.files) ? res.data.files : [];
     showFileModal.value = true;
   } catch (err) {
-    console.error("Gagal load file:", err);
     modalFiles.value = [];
   } finally {
     showFileModal.value = true;
@@ -1290,7 +1151,7 @@ const downloadFile = (file) => {
   }
 };
 
-// FITUR CANCELED BERAWAL DARI DEAL KE CANCEL DI HALAMAN DEAL CUSTOMER
+// Canceled from deal to new
 const selectedCustomerToCancel = ref(null);
 const isCancelModalOpen = ref(false);
 const isLoadingModalCancel = ref(false);
@@ -1299,11 +1160,10 @@ const openCancelModal = (row) => {
   const customer = row?.new_customer;
 
   if (!customer) {
-    console.error("new_customer tidak ditemukan", row);
     return;
   }
 
-  // Hanya bisa cancel jika progress = "deal"
+  // Can only cancel if progress = "deal"
   if (!customer.progress || customer.progress.toLowerCase() !== "deal") {
     alert("Customer ini belum dalam status deal.");
     return;
@@ -1325,14 +1185,12 @@ const cancelDeal = async () => {
     isCancelModalOpen.value = false;
     selectedCustomerToCancel.value = null;
   } catch (err) {
-    console.error("Error canceling deal:", err);
     alert("Gagal membatalkan deal.");
   } finally {
     isLoadingModalCancel.value = false;
   }
 };
 
-// Dowload PDF NEW + DEAL CUSTOMER
 const isBouncing = ref(false);
 const downloadPdf = () => {
   isBouncing.value = true;
@@ -1352,7 +1210,6 @@ const openHotelModal = (hotelData) => {
   } else if (Array.isArray(hotelData)) {
     currentHotel.value = hotelData;
   } else {
-    // misal hotelData string "A, B, C"
     currentHotel.value = hotelData.split(",").map((h) => h.trim());
   }
   showHotelModal.value = true;
@@ -1368,11 +1225,9 @@ const instagramUrl = (val) => {
   if (val.startsWith("http")) return val;
   return `https://www.instagram.com/${val.replace("@", "")}`;
 };
-// State
+
 const dropdownOpen = ref(false);
 const showModal = ref(false);
-
-// Dropdown options
 const options = [
   { label: "DP", value: "dp" },
   { label: "Lunas", value: "lunas" },
@@ -1402,7 +1257,6 @@ const openModal = (deal) => {
   modalVisible.value = true;
 };
 
-// Data perbulan
 const showMonthModal = ref(false);
 const showYearModal = ref(false);
 const months = [
@@ -1436,24 +1290,122 @@ watch([month, year], ([m, y]) => {
   }
 });
 
-// function generateDates(start, end) {
-//   const dates = [];
-//   let current = new Date(start);
-//   const endDate = new Date(end);
+const tableWrapper = ref(null);
+const isDragging = ref(false);
+const startX = ref(0);
+const scrollLeft = ref(0);
+const startDrag = (e) => {
+  isDragging.value = true;
+  tableWrapper.value.classList.add("cursor-grabbing");
 
-//   while (current < endDate) {
-//     // stop sebelum check-out
-//     dates.push(new Date(current));
-//     current.setDate(current.getDate() + 1);
-//   }
+  startX.value = e.pageX - tableWrapper.value.offsetLeft;
+  scrollLeft.value = tableWrapper.value.scrollLeft;
+};
+const stopDrag = () => {
+  isDragging.value = false;
+  tableWrapper.value.classList.remove("cursor-grabbing");
+};
+const onDrag = (e) => {
+  if (!isDragging.value) return;
 
-//   return dates;
-// }
+  e.preventDefault();
+
+  const x = e.pageX - tableWrapper.value.offsetLeft;
+  const walk = (x - startX.value) * 1.5;
+  tableWrapper.value.scrollLeft = scrollLeft.value - walk;
+};
+
+const isEditSegmenDropdownOpen = ref(false);
+
+const editSegmenOptions = [
+  {
+    value: "BST Malaysia",
+    label: "BST Malaysia",
+    color: "bg-green-100 text-green-800 border-green-200",
+  },
+  {
+    value: "BST Domestic",
+    label: "BST Domestic",
+    color: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  {
+    value: "WBO",
+    label: "WBO",
+    color: "bg-purple-100 text-purple-800 border-purple-200",
+  },
+  {
+    value: "B2B Overseas",
+    label: "B2B Overseas",
+    color: "bg-orange-100 text-orange-800 border-orange-200",
+  },
+  {
+    value: "B2B Domestic",
+    label: "B2B Domestic",
+    color: "bg-red-100 text-red-800 border-red-200",
+  },
+];
+
+const toggleEditSegmenDropdown = () => {
+  isEditSegmenDropdownOpen.value = !isEditSegmenDropdownOpen.value;
+};
+const selectEditSegmen = (value) => {
+  editFormNewCustomer.value.segmen = value;
+  isEditSegmenDropdownOpen.value = false;
+};
+const getEditSegmenBadgeClass = (value) => {
+  return (
+    editSegmenOptions.find((s) => s.value === value)?.color ||
+    "bg-slate-100 text-slate-700 border-slate-300"
+  );
+};
+
+const isEditViaDropdownOpen = ref(false);
+
+const editViaOptions = [
+  {
+    label: "IG (Instagram)",
+    value: "IG",
+    color: "bg-pink-100 text-pink-800 border-pink-200",
+  },
+  {
+    label: "WA (WhatsApp)",
+    value: "WA",
+    color: "bg-green-100 text-green-800 border-green-200",
+  },
+  {
+    label: "Tiktok",
+    value: "Tiktok",
+    color: "bg-slate-900 text-white border-slate-900",
+  },
+  {
+    label: "Email",
+    value: "Email",
+    color: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  {
+    label: "Website",
+    value: "Website",
+    color: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  },
+];
+
+const toggleEditViaDropdown = () => {
+  isEditViaDropdownOpen.value = !isEditViaDropdownOpen.value;
+};
+const selectEditVia = (value) => {
+  editFormNewCustomer.value.via = value;
+  isEditViaDropdownOpen.value = false;
+};
+const getEditViaBadgeClass = (value) => {
+  return (
+    editViaOptions.find((v) => v.value === value)?.color ||
+    "bg-slate-100 text-slate-700 border-slate-300"
+  );
+};
 </script>
 
 <template>
   <div class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto">
-    <!-- ALERT DEAL -->
     <Transition
       enter-active-class="transition-all duration-300 ease-out"
       enter-from-class="-translate-y-6 opacity-0"
@@ -1464,7 +1416,7 @@ watch([month, year], ([m, y]) => {
     >
       <div
         v-if="showDealAlert"
-        class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-xl bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center justify-between"
+        class="fixed top-4 left-1/2 -translate-x-1/2 z-9999 w-[90%] max-w-xl bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center justify-between"
       >
         <span class="text-sm font-medium">
           {{ dealAlertMessage }}
@@ -1638,31 +1590,112 @@ watch([month, year], ([m, y]) => {
             class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 bg-slate-100 cursor-not-allowed focus:outline-none"
           />
         </div>
-        <div class="flex flex-col mb-3">
+        <div class="flex flex-col mb-3 relative">
           <label
             class="flex items-center gap-1 mb-1 font-medium text-slate-700"
           >
             Segmen
           </label>
 
-          <input
-            v-model="editFormNewCustomer.segmen"
-            placeholder="Segmen"
-            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-          />
+          <!-- Trigger -->
+          <div
+            @click="toggleEditSegmenDropdown"
+            class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
+          >
+            <!-- Selected badge -->
+            <span
+              v-if="editFormNewCustomer.segmen"
+              :class="[
+                'px-3 py-1 text-xs rounded-full border font-medium',
+                getEditSegmenBadgeClass(editFormNewCustomer.segmen),
+              ]"
+            >
+              {{ editFormNewCustomer.segmen }}
+            </span>
+
+            <span v-else class="text-slate-700">Select segmen</span>
+
+            <ChevronRight
+              class="w-4 h-4 text-slate-500 transition-transform duration-200"
+              :class="isEditSegmenDropdownOpen ? 'rotate-90' : 'rotate-0'"
+            />
+          </div>
+
+          <!-- Dropdown -->
+          <ul
+            v-if="isEditSegmenDropdownOpen"
+            class="absolute left-0 right-0 mt-21 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+          >
+            <li
+              v-for="option in editSegmenOptions"
+              :key="option.value"
+              @click="selectEditSegmen(option.value)"
+              class="px-4 py-2 cursor-pointer flex items-center gap-2 hover:bg-blue-50"
+            >
+              <span
+                :class="[
+                  'w-[140px] px-2 py-1 text-xs text-center rounded-full font-medium border',
+                  option.color,
+                ]"
+              >
+                {{ option.label }}
+              </span>
+            </li>
+          </ul>
         </div>
-        <div class="flex flex-col mb-3">
+
+        <div class="flex flex-col mb-3 relative">
           <label
             class="flex items-center gap-1 mb-1 font-medium text-slate-700"
           >
             Via
           </label>
 
-          <input
-            v-model="editFormNewCustomer.via"
-            placeholder="Via"
-            class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-          />
+          <!-- Trigger -->
+          <div
+            @click="toggleEditViaDropdown"
+            class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
+          >
+            <!-- Selected badge -->
+            <span
+              v-if="editFormNewCustomer.via"
+              :class="[
+                'px-3 py-1 text-xs rounded-full border font-medium',
+                getEditViaBadgeClass(editFormNewCustomer.via),
+              ]"
+            >
+              {{ editFormNewCustomer.via }}
+            </span>
+
+            <span v-else class="text-slate-700">Select via</span>
+
+            <ChevronRight
+              class="w-4 h-4 text-slate-500 transition-transform duration-200"
+              :class="isEditViaDropdownOpen ? 'rotate-90' : 'rotate-0'"
+            />
+          </div>
+
+          <!-- Dropdown -->
+          <ul
+            v-if="isEditViaDropdownOpen"
+            class="absolute left-0 right-0 mt-21 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+          >
+            <li
+              v-for="option in editViaOptions"
+              :key="option.value"
+              @click="selectEditVia(option.value)"
+              class="px-4 py-2 cursor-pointer flex items-center gap-2 hover:bg-blue-50"
+            >
+              <span
+                :class="[
+                  'w-[140px] px-2 py-1 text-xs text-center rounded-full font-medium border',
+                  option.color,
+                ]"
+              >
+                {{ option.label }}
+              </span>
+            </li>
+          </ul>
         </div>
 
         <div class="flex flex-col mb-3">
@@ -1954,7 +1987,7 @@ watch([month, year], ([m, y]) => {
           </div>
 
           <!-- Activity -->
-          <div>
+          <!-- <div>
             <label class="font-medium text-slate-700"> Activity </label>
             <input
               v-model="dealForm.activity"
@@ -1962,7 +1995,7 @@ watch([month, year], ([m, y]) => {
               class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
               placeholder="Activity"
             />
-          </div>
+          </div> -->
 
           <!-- Note Hotel -->
           <div>
@@ -2040,7 +2073,6 @@ watch([month, year], ([m, y]) => {
                     Anda memilih: <strong>{{ dealForm.payment_status }}</strong>
                   </p>
 
-                  <!-- Tombol ke kanan -->
                   <div class="flex justify-end">
                     <button
                       @click="showModal = false"
@@ -2099,7 +2131,7 @@ watch([month, year], ([m, y]) => {
             />
           </div>
 
-          <!-- Selected Files (belum upload) -->
+          <!-- Selected Files -->
           <div
             class="flex flex-wrap gap-2 mt-3"
             v-if="dealSelectedFiles.length"
@@ -2145,7 +2177,6 @@ watch([month, year], ([m, y]) => {
               </button>
             </div>
 
-            <!-- GRID INPUT TRANSPORT -->
             <div class="flex flex-col gap-5 text-[15px]">
               <div>
                 <label class="font-medium text-slate-700">Guide</label>
@@ -2202,7 +2233,7 @@ watch([month, year], ([m, y]) => {
               </div>
             </div>
           </div>
-          <!-- Button Add Transport -->
+
           <button
             @click="addTransport"
             class="px-4 py-2 bg-slate-800 text-white rounded-lg mb-6"
@@ -2239,7 +2270,15 @@ watch([month, year], ([m, y]) => {
             </div>
 
             <div class="flex flex-col gap-5 text-[15px]">
-              <!-- HOTEL -->
+              <!-- Hotel -->
+              <div>
+                <label class="font-medium text-slate-700">Tour Plan</label>
+                <input
+                  v-model="rs.tour_plan"
+                  class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 mt-1 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  placeholder="Tour Plan"
+                />
+              </div>
               <div>
                 <label class="font-medium text-slate-700">Phone Hotel</label>
                 <input
@@ -2258,13 +2297,69 @@ watch([month, year], ([m, y]) => {
                 />
               </div>
 
-              <!-- LUNCH -->
+              <!-- Activity -->
+              <div
+                v-for="(a, ai) in rs.activities"
+                :key="ai"
+                class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
+              >
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Activity
+                  </label>
+                  <input
+                    v-model="a.name"
+                    placeholder="Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    v-model="a.phone"
+                    placeholder="Phone Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <div class="flex flex-col">
+                  <label class="text-xs font-medium text-slate-600 mb-1">
+                    Location
+                  </label>
+                  <input
+                    v-model="a.location"
+                    placeholder="Lokasi Activity"
+                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
+                  />
+                </div>
+
+                <div class="flex items-end">
+                  <button
+                    @click="removeItem(index, 'activities', ai)"
+                    class="h-11 w-11 text-red-600"
+                    title="Remove activity"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <button
+                @click="addActivity(index)"
+                class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
+              >
+                + Add Activity
+              </button>
+
+              <!-- Lunch -->
               <div
                 v-for="(l, li) in rs.lunches"
                 :key="li"
                 class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
               >
-                <!-- NAME -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Lunch
@@ -2276,7 +2371,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- PHONE -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Phone
@@ -2288,7 +2382,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- LOCATION -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Location
@@ -2300,7 +2393,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- REMOVE -->
                 <div class="flex items-end">
                   <button
                     @click="removeItem(index, 'lunches', li)"
@@ -2319,13 +2411,12 @@ watch([month, year], ([m, y]) => {
                 + Add Lunch
               </button>
 
-              <!-- 🍽️ DINNER -->
+              <!-- Dinner -->
               <div
                 v-for="(d, di) in rs.dinners"
                 :key="di"
                 class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
               >
-                <!-- NAME -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Dinner
@@ -2337,7 +2428,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- PHONE -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Phone
@@ -2349,7 +2439,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- LOCATION -->
                 <div class="flex flex-col">
                   <label class="text-xs font-medium text-slate-600 mb-1">
                     Location
@@ -2361,7 +2450,6 @@ watch([month, year], ([m, y]) => {
                   />
                 </div>
 
-                <!-- REMOVE -->
                 <div class="flex items-end">
                   <button
                     @click="removeItem(index, 'dinners', di)"
@@ -2378,67 +2466,6 @@ watch([month, year], ([m, y]) => {
                 class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
               >
                 + Add Dinner
-              </button>
-
-              <!-- ACTIVITY -->
-              <div
-                v-for="(a, ai) in rs.activities"
-                :key="ai"
-                class="relative grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.2fr_auto] gap-4 items-start mb-4"
-              >
-                <!-- NAME -->
-                <div class="flex flex-col">
-                  <label class="text-xs font-medium text-slate-600 mb-1">
-                    Activity
-                  </label>
-                  <input
-                    v-model="a.name"
-                    placeholder="Activity"
-                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-                  />
-                </div>
-
-                <!-- PHONE -->
-                <div class="flex flex-col">
-                  <label class="text-xs font-medium text-slate-600 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    v-model="a.phone"
-                    placeholder="Phone Activity"
-                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-                  />
-                </div>
-
-                <!-- LOCATION -->
-                <div class="flex flex-col">
-                  <label class="text-xs font-medium text-slate-600 mb-1">
-                    Location
-                  </label>
-                  <input
-                    v-model="a.location"
-                    placeholder="Lokasi Activity"
-                    class="w-full border-[1.5px] border-slate-200 rounded-lg p-3 focus:border-slate-300 outline-none transition-all bg-white/80 backdrop-blur"
-                  />
-                </div>
-
-                <!-- REMOVE -->
-                <div class="flex items-end">
-                  <button
-                    @click="removeItem(index, 'activities', ai)"
-                    class="h-11 w-11 text-red-600"
-                    title="Remove activity"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-
-              <button
-                @click="addActivity(index)"
-                class="-mt-2 w-32 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
-              >
-                + Add Activity
               </button>
             </div>
           </div>
@@ -2528,7 +2555,7 @@ watch([month, year], ([m, y]) => {
         />
       </div>
       <div class="grid grid-cols-5 gap-3">
-        <!-- BULAN -->
+        <!-- Bulan -->
         <button
           @click="showMonthModal = true"
           class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -2542,7 +2569,7 @@ watch([month, year], ([m, y]) => {
           </span>
         </button>
 
-        <!-- TAHUN  -->
+        <!-- Tahun  -->
         <button
           @click="showYearModal = true"
           class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -2557,7 +2584,7 @@ watch([month, year], ([m, y]) => {
         </button>
       </div>
 
-      <!-- MODAL BULAN -->
+      <!-- Modal Bulan -->
       <div
         v-if="showMonthModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -2566,7 +2593,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showMonthModal = false"
@@ -2589,7 +2615,7 @@ watch([month, year], ([m, y]) => {
         </div>
       </div>
 
-      <!-- MODAL TAHUN -->
+      <!-- Modal Tahun -->
       <div
         v-if="showYearModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -2598,7 +2624,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showYearModal = false"
@@ -2641,7 +2666,6 @@ watch([month, year], ([m, y]) => {
             v-if="showProgressDropdown"
             class="absolute z-50 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            <!-- ALL -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress('all')"
@@ -2653,9 +2677,8 @@ watch([month, year], ([m, y]) => {
               </span>
             </div>
 
-            <!-- PROGRESS LIST -->
             <div
-              v-for="prog in ['on progress', 'deal', 'waiting', 'canceled']"
+              v-for="prog in ['on progress', 'deal', 'postpone', 'canceled']"
               :key="prog"
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress(prog)"
@@ -2667,7 +2690,7 @@ watch([month, year], ([m, y]) => {
                     'bg-blue-100 text-blue-800 border-blue-200',
                   prog === 'deal' &&
                     'bg-green-100 text-green-800 border-green-200',
-                  prog === 'waiting' &&
+                  prog === 'postpone' &&
                     'bg-yellow-100 text-yellow-800 border-yellow-200',
                   prog === 'canceled' &&
                     'bg-red-100 text-red-800 border-red-200',
@@ -2719,7 +2742,6 @@ watch([month, year], ([m, y]) => {
         </transition>
       </div>
       <div class="lg:col-span-5 flex gap-3 justify-end mb-4">
-        <!-- DOWNLOAD PDF -->
         <button
           @click="downloadPdf"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
@@ -2731,7 +2753,6 @@ watch([month, year], ([m, y]) => {
           Download PDF
         </button>
 
-        <!-- RESET -->
         <button
           @click="resetFilters"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
@@ -2747,7 +2768,12 @@ watch([month, year], ([m, y]) => {
 
     <!-- Table -->
     <div
-      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+      ref="tableWrapper"
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll cursor-grab select-none"
+      @mousedown="startDrag"
+      @mouseup="stopDrag"
+      @mouseleave="stopDrag"
+      @mousemove="onDrag"
     >
       <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
         <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
@@ -3090,7 +3116,7 @@ watch([month, year], ([m, y]) => {
             >
               <div
                 v-if="showHotelModal"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/10"
                 @click.self="closeHotelModal"
               >
                 <div
@@ -3277,7 +3303,6 @@ watch([month, year], ([m, y]) => {
           </p>
 
           <!-- Actions -->
-          <!-- Actions -->
           <div class="flex justify-end gap-3">
             <button
               class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
@@ -3321,7 +3346,7 @@ watch([month, year], ([m, y]) => {
       </div>
     </transition>
 
-    <!--  MODAL FILE DOWLOAD -->
+    <!--  Modal File Download -->
     <Transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 scale-95"
@@ -3338,7 +3363,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-md overflow-hidden"
         >
-          <!-- HEADER -->
           <div class="px-8 py-6 flex items-center justify-between">
             <h2 class="text-lg font-semibold text-slate-900">
               All Files
@@ -3354,11 +3378,10 @@ watch([month, year], ([m, y]) => {
               ✕
             </button>
           </div>
-          <!-- CONTENT -->
+
           <div
             class="px-8 pb-8 max-h-[calc(90vh-96px)] overflow-y-auto hidden-scroll"
           >
-            <!-- EMPTY STATE -->
             <div
               v-if="!modalFiles || modalFiles.length === 0"
               class="flex flex-col items-center justify-center py-24 text-slate-400"
@@ -3370,7 +3393,6 @@ watch([month, year], ([m, y]) => {
               </p>
             </div>
 
-            <!-- FILE GRID -->
             <div
               v-else
               class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
@@ -3380,7 +3402,6 @@ watch([month, year], ([m, y]) => {
                 :key="file.id"
                 class="bg-slate-50 rounded-2xl p-4 hover:bg-white hover:shadow-md transition flex flex-col"
               >
-                <!-- PREVIEW CARD: KLIK LANGSUNG OPEN FILE DI TAB BARU -->
                 <a
                   :href="
                     file.preview_url.startsWith('http')
@@ -3391,7 +3412,6 @@ watch([month, year], ([m, y]) => {
                   rel="noopener noreferrer"
                   class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer"
                 >
-                  <!-- IMAGE -->
                   <img
                     v-if="
                       typeof file.original_name === 'string' &&
@@ -3407,7 +3427,6 @@ watch([month, year], ([m, y]) => {
                     class="w-full h-full object-cover"
                   />
 
-                  <!-- GENERIC FILE ICON UNTUK PDF/WORD/LAINNYA -->
                   <div
                     v-else
                     class="flex flex-col items-center justify-center text-slate-400 px-2"
@@ -3419,12 +3438,10 @@ watch([month, year], ([m, y]) => {
                   </div>
                 </a>
 
-                <!-- FILE NAME -->
                 <p class="mt-3 text-xs text-slate-600 truncate">
                   {{ file.original_name }}
                 </p>
 
-                <!-- DOWNLOAD BUTTON -->
                 <button
                   @click="downloadFile(file)"
                   class="mt-4 inline-flex items-center justify-center gap-2 text-sm font-medium bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white py-2.5 rounded-lg transition"

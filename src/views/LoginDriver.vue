@@ -3,8 +3,10 @@ import { Eye, EyeOff } from "lucide-vue-next";
 import LoadingSpinner from "../components/Loading.vue";
 import { ref, onMounted } from "vue";
 import { useAuthStore } from "../stores/auth";
+import { useRouter } from "vue-router";
 import BgAuth from "../assets/images/bg-auth.jpg";
 
+const router = useRouter();
 const auth = useAuthStore();
 
 // State
@@ -57,13 +59,26 @@ const login = async () => {
       password: password.value,
     });
 
+    if (auth.role !== "admin") {
+      passwordError.value = "Hanya Driver yang bisa login di halaman ini";
+      modalMsg.value = "Login gagal!";
+      modalType.value = "error";
+      showModal.value = true;
+      loading.value = false;
+      return;
+    }
+
     modalMsg.value = "Berhasil! Mohon tunggu sebentar...";
     modalType.value = "success";
     showModal.value = true;
+
+    setTimeout(() => {
+      showModal.value = false;
+      router.push("/dashboard/driver");
+    }, 1500);
   } catch (err) {
     modalMsg.value = "Harap masukan email dan password dengan benar";
     console.error(err.response?.data?.message || err.message);
-
     modalType.value = "error";
     showModal.value = true;
   } finally {
@@ -88,10 +103,7 @@ const login = async () => {
           <div
             class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center transform transition-all"
           >
-            <h3
-              :class="modalType === 'error' ? 'text-black' : 'text-black'"
-              class="text-lg font-semibold mb-3"
-            >
+            <h3 class="text-lg font-semibold mb-3">
               {{ modalType === "error" ? "Login Gagal" : "Login Berhasil" }}
             </h3>
             <p class="text-gray-700 mb-5">{{ modalMsg }}</p>
@@ -110,7 +122,7 @@ const login = async () => {
       class="relative z-10 bg-slate-800/40 backdrop-blur-md rounded-2xl p-10 w-full max-w-md border border-cyan-700 shadow-[0_0_5px_#06b6d4]"
     >
       <h2 class="text-3xl font-semibold mb-4 text-center text-white">
-        Login Super Admin
+        Login Driver
       </h2>
       <p class="text-center text-gray-300 mb-4">
         Please enter your credentials to continue.
@@ -125,10 +137,7 @@ const login = async () => {
           placeholder="Your Email"
           class="w-full px-5 py-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-        <p
-          v-if="emailError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="emailError" class="mt-1 text-red-500 text-sm">
           {{ emailError }}
         </p>
       </div>
@@ -136,14 +145,12 @@ const login = async () => {
       <!-- Password -->
       <div class="mb-7 relative">
         <label class="block text-gray-300 font-medium mb-2">Password</label>
-
         <input
           v-model="password"
           :type="showPassword ? 'text' : 'password'"
           placeholder="Password"
           class="w-full px-5 py-3 pr-12 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:scale-103 transition-all duration-300"
         />
-
         <button
           type="button"
           @click="showPassword = !showPassword"
@@ -151,11 +158,7 @@ const login = async () => {
         >
           <component :is="showPassword ? EyeOff : Eye" class="w-5 h-5" />
         </button>
-
-        <p
-          v-if="passwordError"
-          class="mt-1 text-red-500 text-sm transition-all duration-300"
-        >
+        <p v-if="passwordError" class="mt-1 text-red-500 text-sm">
           {{ passwordError }}
         </p>
       </div>
@@ -177,7 +180,6 @@ const login = async () => {
       Background designed by Freepik
     </a>
   </div>
-
   <LoadingSpinner v-if="loading" />
 </template>
 

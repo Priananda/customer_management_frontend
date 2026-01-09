@@ -9,15 +9,15 @@ import LoadingSpinner from "../components/Loading.vue";
 import { useAuthStore } from "../stores/auth";
 import { useLogout } from "../composables/useLogout";
 
-// Store auth
 const auth = useAuthStore();
 const user = computed(() => auth.user);
 const role = computed(() => auth.role);
 
-// Logout composable
+// Hanya admin & super_admin
+const isAdmin = computed(() => ["admin", "super_admin"].includes(role.value));
+
 const { logout } = useLogout();
 
-// Sidebar collapsed state
 const collapsed = ref(true);
 const loading = ref(false);
 
@@ -40,6 +40,7 @@ onMounted(async () => {
 
 <template>
   <div class="flex min-h-screen bg-custom-svg">
+    <!-- Sidebar -->
     <Sidebar
       v-if="user"
       :user="user"
@@ -50,10 +51,12 @@ onMounted(async () => {
       @loading-start="loading = true"
     />
 
+    <!-- Main content -->
     <div
       class="flex-1 flex flex-col transition-all duration-300"
       :class="collapsed ? 'ml-0' : 'ml-64'"
     >
+      <!-- Header -->
       <Header
         v-if="user"
         :user="user"
@@ -61,27 +64,35 @@ onMounted(async () => {
         @toggleSidebar="collapsed = !collapsed"
       />
 
+      <!-- Activity Log (Hanya Admin/Super Admin) -->
       <div
+        v-if="isAdmin"
         class="flex relative z-20 justify-end items-center p-3 md:-mb-14 gap-2"
       >
-        <!-- BUTTON -->
         <button
           @click="showModal = true"
           class="px-4 py-2 text-white rounded-lg bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 transition-all duration-200 cursor-pointer"
         >
           Activity Log
         </button>
-        <!-- MODAL -->
+
         <ActivityLogModal :show="showModal" @close="showModal = false" />
       </div>
 
+      <!-- Main router view -->
       <main class="p-0 md:p-6 lg:p-6 flex-1 overflow-auto hidden-scroll">
         <router-view />
       </main>
 
-      <BirthdayNotification :show="true" :customers="birthdayStore.customers" />
+      <!-- Birthday Notification (Hanya Admin/Super Admin) -->
+      <BirthdayNotification
+        v-if="isAdmin"
+        :show="true"
+        :customers="birthdayStore.customers"
+      />
     </div>
 
+    <!-- Loading Spinner -->
     <LoadingSpinner v-if="loading" />
   </div>
 </template>

@@ -33,7 +33,6 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
       <div
         class="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-md overflow-hidden"
       >
-        <!-- HEADER -->
         <div class="px-8 py-6 flex items-center justify-between">
           <h2 class="text-lg font-semibold text-slate-900">
             All Files
@@ -50,11 +49,9 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
           </button>
         </div>
 
-        <!-- CONTENT -->
         <div
           class="px-8 pb-8 overflow-auto overflow-y-auto hidden-scroll max-h-[calc(90vh-96px)]"
         >
-          <!-- EMPTY STATE -->
           <div
             v-if="!files || files.length === 0"
             class="flex flex-col items-center justify-center py-24 text-slate-400"
@@ -63,7 +60,6 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
             <p class="text-sm">Tidak ada file new customer yang tersedia</p>
           </div>
 
-          <!-- FILE GRID -->
           <div
             v-else
             class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
@@ -73,21 +69,18 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
               :key="file.id"
               class="bg-slate-50 rounded-2xl p-4 hover:bg-white hover:shadow-md transition flex flex-col"
             >
-              <!-- PREVIEW CARD: KLIK LANGSUNG OPEN FILE DI TAB BARU -->
               <a
                 :href="file.preview_url"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="w-full h-40 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer"
               >
-                <!-- IMAGE -->
                 <img
                   v-if="isImage(file.preview_url)"
                   :src="file.preview_url"
                   class="w-full h-full object-cover"
                 />
 
-                <!-- GENERIC FILE ICON UNTUK PDF/WORD/EXCEL/LAINNYA -->
                 <div
                   v-else
                   class="flex flex-col items-center justify-center text-slate-400 px-2"
@@ -99,7 +92,6 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
                 </div>
               </a>
 
-              <!-- FILE NAME -->
               <p
                 class="mt-3 text-xs text-slate-600 truncate"
                 :title="file.original_name"
@@ -107,7 +99,6 @@ const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
                 {{ file.original_name }}
               </p>
 
-              <!-- DOWNLOAD BUTTON -->
               <a
                 :href="`${API_URL}/download-file/${file.id}`"
                 target="_blank"

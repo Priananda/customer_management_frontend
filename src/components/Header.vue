@@ -12,25 +12,33 @@ const emit = defineEmits(["toggleSidebar"]);
 function lastName(name) {
   if (!name) return "";
   const parts = name.trim().split(" ");
-  const last = parts[parts.length - 1];
-  return last.charAt(0).toUpperCase() + last.slice(1).toLowerCase();
+  return parts[parts.length - 1] || "";
 }
 </script>
 
 <template>
-  <header class="h-16 bg-white flex items-center px-5 gap-4">
-    <button @click="emit('toggleSidebar')" class="">
-      <Menu class="w-6 h-6 text-gray-700 hover:text-gray-800" />
+  <header class="h-16 bg-white flex items-center px-5 gap-4 shadow">
+    <!-- Hamburger toggle -->
+    <button
+      @click="emit('toggleSidebar')"
+      class="p-2 rounded hover:bg-gray-100"
+    >
+      <Menu class="w-6 h-6 text-gray-700" />
     </button>
 
+    <!-- Brand / logo -->
     <div class="flex items-center justify-center gap-2">
       <img :src="checklist" alt="Checklist" class="w-8 h-8 object-contain" />
-      <p class="text-lg font-semibold text-black">Cs Management</p>
+      <p class="text-lg font-semibold text-black">CS Management</p>
     </div>
 
-    <p class="text-lg font-semibold text-black ml-auto text-end">
-      Welcome,
-      {{ lastName(user.name) }}
+    <!-- User info -->
+    <p class="ml-auto text-lg font-semibold text-black">
+      Welcome, {{ lastName(props.user.name) }}
     </p>
   </header>
 </template>
+
+<style scoped>
+/* Optional styling */
+</style>

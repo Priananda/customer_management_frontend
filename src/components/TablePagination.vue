@@ -9,7 +9,9 @@ const props = defineProps({
 
 const emit = defineEmits(["update:page"]);
 
-const totalPages = computed(() => Math.ceil(props.totalItems / props.pageSize));
+const totalPages = computed(() => {
+  return Math.ceil(props.totalItems / props.pageSize);
+});
 
 function prevPage() {
   if (props.currentPage > 1) {

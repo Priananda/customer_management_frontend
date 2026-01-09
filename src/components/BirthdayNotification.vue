@@ -8,7 +8,6 @@ const props = defineProps({
 
 const visible = ref(false);
 
-// key unik per hari (yyyy-mm-dd)
 const todayKey = `birthday-notification-${new Date()
   .toISOString()
   .slice(0, 10)}`;
@@ -19,7 +18,6 @@ watch(
     if (!props.show) return;
     if (!customers || customers.length === 0) return;
 
-    // sudah pernah muncul di session ini hari ini
     if (sessionStorage.getItem(todayKey)) return;
 
     visible.value = true;
@@ -33,7 +31,7 @@ watch(
   <Transition name="slide-up">
     <div
       v-if="show && visible"
-      class="fixed z-50 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:w-96 max-w-md mx-auto rounded-xl bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 shadow-xl p-4 space-y-3"
+      class="fixed z-50 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:w-96 max-w-md mx-auto rounded-xl bg-linear-to-br from-pink-50 to-purple-50 border border-pink-200 shadow-xl p-4 space-y-3"
     >
       <!-- Header -->
       <div class="flex items-center gap-3">

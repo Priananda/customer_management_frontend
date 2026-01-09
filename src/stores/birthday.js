@@ -1,5 +1,4 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
 import api from "@/api/api";
 
 export const useBirthdayStore = defineStore("birthday", {
@@ -15,7 +14,6 @@ export const useBirthdayStore = defineStore("birthday", {
         this.customers = res.data;
 
       } catch (e) {
-        console.error("fetch birthday error:", e);
       }
     },
   },

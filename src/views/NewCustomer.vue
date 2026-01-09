@@ -11,11 +11,6 @@ import {
   Download,
   X,
 } from "lucide-vue-next";
-import FilePreviewModal from "../components/FilePreviewModal.vue";
-import ConfirmModal from "../components/ConfirmModalDelete.vue";
-import TablePagination from "../components/TablePagination.vue";
-import note from "@/assets/images/note.png";
-
 import {
   ref,
   computed,
@@ -27,6 +22,10 @@ import {
 } from "vue";
 import api from "../api/api";
 import { useAuthStore } from "../stores/auth.js";
+import FilePreviewModal from "../components/FilePreviewModal.vue";
+import ConfirmModal from "../components/ConfirmModalDelete.vue";
+import TablePagination from "../components/TablePagination.vue";
+import note from "@/assets/images/note.png";
 
 const authStore = useAuthStore();
 const picName = computed(() => authStore.user?.name || "");
@@ -48,7 +47,6 @@ const canEdit = ["admin", "staff", "super_admin", "pic"].includes(
 );
 
 // State
-const showCountryDropdown = ref(false);
 const newCustomers = ref([]);
 const summary = ref({
   total: 0,
@@ -65,10 +63,22 @@ const filterDate = ref("");
 const filterProgress = ref("all");
 const selectedSegmen = ref("all");
 
-// Pagination
 const currentPage = ref(1);
 const pageSize = ref(10);
 const totalItems = ref(0);
+
+// dropdown state
+const showProgressDropdown = ref(false);
+const showModalProgressDropdown = ref(false);
+const showSegmenDropdown = ref(false);
+
+// loading tabel
+const loading = ref(false);
+
+// Modal delete
+const isDeleting = ref(false);
+const showDeleteModal = ref(false);
+const selectedId = ref(null);
 
 // modal & form
 const showPreviewModal = ref(false);
@@ -89,22 +99,9 @@ const form = ref({
   tour_packages: "",
   check_in: "",
   check_out: "",
-  hotel: [""], // ubah dari string ke array
+  hotel: [""],
   notes: "",
 });
-
-// dropdown state
-const showProgressDropdown = ref(false);
-const showModalProgressDropdown = ref(false);
-const showSegmenDropdown = ref(false);
-
-// loading tabel
-const loading = ref(false);
-
-// Modal delete
-const isDeleting = ref(false);
-const showDeleteModal = ref(false);
-const selectedId = ref(null);
 
 const getNewCustomers = async () => {
   loading.value = true;
@@ -136,6 +133,49 @@ const getNewCustomers = async () => {
   }
 };
 
+// const getNewCustomers = async () => {
+//   loading.value = true;
+//   try {
+//     const res = await api.get("/new-customer", {
+//       params: {
+//         page: currentPage.value,
+//         per_page: pageSize.value,
+//       },
+//     });
+
+//     newCustomers.value = res.data.data.map((c) => ({
+//       id: c.id,
+//       date: c.date ?? "",
+//       phone: c.phone ?? "",
+//       email: c.email ?? "",
+//       name: c.name ?? "",
+//       progress: c.progress ?? "",
+//       pic: c.pic ?? "",
+//       segmen: c.segmen ?? "",
+//       via: c.via ?? "",
+//       country: c.country ?? "",
+//       social_media_id: c.social_media_id ?? "",
+//       tour_packages: c.tour_packages ?? "",
+//       check_in: c.check_in ?? "",
+//       check_out: c.check_out ?? "",
+//       hotel: c.hotel ?? "",
+//       notes: c.notes ?? "",
+//     }));
+
+//     // Total dari backend
+//     totalItems.value = res.data.pagination.total;
+//   } catch (err) {
+//     console.error("Error fetching customers:", err);
+//     newCustomers.value = [];
+//   } finally {
+//     loading.value = false;
+//   }
+// };
+// onMounted(() => {
+//   getNewCustomers();
+// });
+
+// Get Summary
 const getSummary = async () => {
   try {
     const res = await api.get("/new-customer/summary");
@@ -145,7 +185,7 @@ const getSummary = async () => {
   }
 };
 
-// TERMASUK FITUR UPLOAD
+// Submit data + Fitur Upload File
 const progressError = ref("");
 const submitForm = async () => {
   if (loadingModal.value) return;
@@ -161,16 +201,14 @@ const submitForm = async () => {
   try {
     const formData = new FormData();
 
-    // Append semua field form
     Object.keys(form.value).forEach((key) => {
       if (key === "hotel") {
-        formData.append(key, form.value[key].join(",")); // simpan hotel sebagai string
+        formData.append(key, form.value[key].join(","));
       } else {
         formData.append(key, form.value[key] ?? "");
       }
     });
 
-    // Append semua file baru
     selectedFiles.value.forEach((file) => formData.append("files[]", file));
 
     let res;
@@ -181,11 +219,8 @@ const submitForm = async () => {
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
-
-      // Update preview file
       existingFiles.value.push(...(res.data.files || []));
     } else {
-      // Create customer baru + upload file
       res = await api.post("/new-customer-with-files", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -221,7 +256,6 @@ const confirmDelete = async () => {
   }
 };
 
-// Data perbulan
 const month = ref("");
 const year = ref("");
 const filterMonth = ref("");
@@ -264,7 +298,6 @@ const filteredCustomers = computed(() => {
         })()
       : true;
 
-    // Data perbulan
     const matchesMonth = filterMonth.value
       ? (() => {
           const filter = filterMonth.value;
@@ -300,17 +333,15 @@ const filteredCustomers = computed(() => {
   });
 });
 
-// Data perbulan
 watch(
   [searchKeyword, filterMonth, filterDate, filterProgress, selectedSegmen],
   async () => {}
 );
 
-// Data perbulan
 watch([month, year], ([m, y]) => {
   if (m && y) {
     filterMonth.value = `${y}-${m}`;
-    // Kombinasi bulan + tahun → trigger loading sekali
+    // Combination month + year
     isFiltering.value = true;
     nextTick(() => {
       setTimeout(() => {
@@ -318,7 +349,7 @@ watch([month, year], ([m, y]) => {
       }, 700);
     });
   } else if (y && !m) {
-    // Hanya tahun dipilih → trigger loading
+    // Only selected year → trigger loading
     filterMonth.value = "";
     isFiltering.value = true;
     nextTick(() => {
@@ -327,7 +358,7 @@ watch([month, year], ([m, y]) => {
       }, 700);
     });
   } else {
-    // Hanya bulan dipilih → tidak ada loading
+    // Only month selected → no loading
     filterMonth.value = "";
   }
 });
@@ -342,7 +373,6 @@ watch([filterDate], ([d]) => {
   }
 });
 
-// Data perbulan
 const getMonth = (date) => {
   if (!date) return null;
   return date.slice(0, 7);
@@ -359,11 +389,21 @@ const formatDate = (date) => {
 };
 
 const uniqueSegmens = computed(() => {
-  const seg = new Set();
+  const map = new Map();
+
   newCustomers.value.forEach((c) => {
-    if (c.segmen) seg.add(c.segmen);
+    if (!c.segmen) return;
+
+    const key = c.segmen.trim().toLowerCase();
+
+    const option = segmenOptions.find((s) => s.value.toLowerCase() === key);
+
+    if (option && !map.has(key)) {
+      map.set(key, option.label);
+    }
   });
-  return Array.from(seg);
+
+  return Array.from(map.values());
 });
 
 const progressColor = (progress) => {
@@ -372,7 +412,7 @@ const progressColor = (progress) => {
     return "bg-green-100 text-green-800 border border-green-200";
   if (p === "on progress")
     return "bg-blue-100 text-blue-800 border border-blue-200";
-  if (p === "waiting")
+  if (p === "postpone")
     return "bg-yellow-100 text-yellow-800 border border-yellow-200";
   if (p === "canceled") return "bg-red-100 text-red-800 border border-red-200";
   return "bg-slate-100 text-slate-700 border border-slate-200";
@@ -401,6 +441,7 @@ const openEditModal = (customer) => {
   fetchCustomerFiles(customer.id);
   showModal.value = true;
 };
+
 const fetchCustomerFiles = async (customerId) => {
   try {
     const res = await api.get(`/customer-files/${customerId}`);
@@ -489,7 +530,6 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 
-// const progressOptions = ["on progress", "deal", "canceled", "waiting"];
 const progressOptions = [
   {
     label: "on progress",
@@ -502,8 +542,8 @@ const progressOptions = [
     color: "bg-green-100 text-green-800 border border-green-200",
   },
   {
-    label: "waiting",
-    value: "waiting",
+    label: "postpone",
+    value: "postpone",
     color: "bg-yellow-100 text-yellow-800 border border-yellow-200",
   },
   {
@@ -512,8 +552,13 @@ const progressOptions = [
     color: "bg-red-100 text-red-800 border border-red-200",
   },
 ];
+const getProgressBadgeClass = (value) => {
+  return (
+    progressOptions.find((p) => p.value === value)?.color ||
+    "bg-slate-100 text-slate-600 border-slate-300"
+  );
+};
 
-// Data perbulan
 const isRotating = ref(false);
 function resetFilters() {
   isRotating.value = true;
@@ -536,6 +581,7 @@ const paginatedDataCustomers = computed(() => {
   totalItems.value = filteredCustomers.value.length;
   return filteredCustomers.value.slice(start, end);
 });
+
 watch([searchKeyword, filterDate, filterProgress, selectedSegmen], () => {
   currentPage.value = 1;
 });
@@ -587,12 +633,11 @@ const countryCategories = ref({
   Australia: ["Australia", "New Zealand"],
 });
 
-// pilih country dari list
 const selectCountry = (country) => {
   form.value.country = country;
   showCountryModal.value = false;
 };
-// hapus country dari list
+
 const deleteCountry = (category, country) => {
   countryCategories.value[category] = countryCategories.value[category].filter(
     (c) => c !== country
@@ -602,15 +647,16 @@ const deleteCountry = (category, country) => {
     form.value.country = "";
   }
 };
+
 const closeCountryModal = () => {
   showCountryModal.value = false;
 };
+
 const selectCategory = (category) => {
   newCountryCategory.value = category;
   showCategoryDropdown.value = false;
 };
 
-// Alert reactive
 const alertMessage = ref("");
 const alertColor = ref("red");
 const showAlert = (message, color = "red") => {
@@ -621,7 +667,6 @@ const showAlert = (message, color = "red") => {
   }, 5000);
 };
 
-// Alert Tailwind
 const addNewCountryToCategory = () => {
   const country = newCountryInput.value.trim();
   const category = newCountryCategory.value;
@@ -651,22 +696,19 @@ const addNewCountryToCategory = () => {
   showCountryModal.value = false;
 };
 
-// FITUR FITUR UPLOAD
+// Ftur - fitur upload
 const selectedFiles = ref([]);
 const existingFiles = ref([]);
 
-// Tambahkan file baru tanpa menimpa yang lama
 const handleFileChange = (e) => {
   const newFiles = Array.from(e.target.files);
   selectedFiles.value = [...selectedFiles.value, ...newFiles];
 };
 
-// Hapus file baru sebelum upload
 const removeSelectedFile = (index) => {
   selectedFiles.value.splice(index, 1);
 };
 
-// Hapus file lama (sudah di backend)
 const removeExistingFile = async (fileId) => {
   try {
     await api.delete(`/customer-files/${fileId}`);
@@ -675,7 +717,7 @@ const removeExistingFile = async (fileId) => {
     console.error("Error deleting file:", err);
   }
 };
-// BUKA MODAL PREVIEW LOCAL KE DOMAIN
+
 const openFilePreview = async (customerId) => {
   existingFiles.value = [];
 
@@ -702,7 +744,6 @@ const openFilePreview = async (customerId) => {
   }
 };
 
-// DOWLOAD PDF
 const isBouncing = ref(false);
 const downloadPdfAll = () => {
   isBouncing.value = true;
@@ -723,7 +764,6 @@ const instagramUrl = (val) => {
   return `https://www.instagram.com/${val.replace("@", "")}`;
 };
 
-// Data perbulan
 const showMonthModal = ref(false);
 const showYearModal = ref(false);
 const months = [
@@ -756,6 +796,113 @@ watch([month, year], ([m, y]) => {
     filterMonth.value = "";
   }
 });
+
+const tableWrapper = ref(null);
+const isDragging = ref(false);
+const startX = ref(0);
+const scrollLeft = ref(0);
+const startDrag = (e) => {
+  isDragging.value = true;
+  tableWrapper.value.classList.add("cursor-grabbing");
+
+  startX.value = e.pageX - tableWrapper.value.offsetLeft;
+  scrollLeft.value = tableWrapper.value.scrollLeft;
+};
+const stopDrag = () => {
+  isDragging.value = false;
+  tableWrapper.value.classList.remove("cursor-grabbing");
+};
+const onDrag = (e) => {
+  if (!isDragging.value) return;
+
+  e.preventDefault();
+
+  const x = e.pageX - tableWrapper.value.offsetLeft;
+  const walk = (x - startX.value) * 1.5;
+  tableWrapper.value.scrollLeft = scrollLeft.value - walk;
+};
+
+const isSegmenDropdownOpen = ref(false);
+const segmenOptions = [
+  {
+    value: "BST Malaysia",
+    label: "BST Malaysia",
+    color: "bg-green-100 text-green-800 border-green-200",
+  },
+  {
+    value: "BST Domestic",
+    label: "BST Domestic",
+    color: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  {
+    value: "WBO",
+    label: "WBO",
+    color: "bg-purple-100 text-purple-800 border-purple-200",
+  },
+  {
+    value: "B2B Overseas",
+    label: "B2B Overseas",
+    color: "bg-orange-100 text-orange-800 border-orange-200",
+  },
+  {
+    value: "B2B Domestic",
+    label: "B2B Domestic",
+    color: "bg-red-100 text-red-800 border-red-200",
+  },
+];
+
+const toggleSegmenDropdown = () => {
+  isSegmenDropdownOpen.value = !isSegmenDropdownOpen.value;
+};
+const onSelectSegmen = (value) => {
+  form.value.segmen = value;
+  isSegmenDropdownOpen.value = false;
+};
+const getSegmenBadgeClass = (value) => {
+  return (
+    segmenOptions.find((s) => s.value === value)?.color ||
+    "bg-slate-100 text-slate-600 border-slate-300"
+  );
+};
+
+const showViaDropdown = ref(false);
+const viaOptions = [
+  {
+    label: "IG (Instagram)",
+    value: "IG",
+    color: "bg-pink-100 text-pink-800 border-pink-200",
+  },
+  {
+    label: "WA (WhatsApp)",
+    value: "WA",
+    color: "bg-green-100 text-green-800 border-green-200",
+  },
+  {
+    label: "Tiktok",
+    value: "Tiktok",
+    color: "bg-slate-900 text-white border-slate-900",
+  },
+  {
+    label: "Email",
+    value: "Email",
+    color: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  {
+    label: "Website",
+    value: "Website",
+    color: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  },
+];
+const selectViaOption = (value) => {
+  form.value.via = value;
+  showViaDropdown.value = false;
+};
+const getViaBadgeClass = (value) => {
+  return (
+    viaOptions.find((v) => v.value === value)?.color ||
+    "bg-slate-100 text-slate-700 border-slate-200"
+  );
+};
 </script>
 
 <template>
@@ -803,7 +950,7 @@ watch([month, year], ([m, y]) => {
         />
       </div>
       <div class="grid grid-cols-5 gap-3">
-        <!-- BULAN -->
+        <!-- Bulan -->
         <button
           @click="showMonthModal = true"
           class="relative col-span-3 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -817,7 +964,7 @@ watch([month, year], ([m, y]) => {
           </span>
         </button>
 
-        <!-- TAHUN  -->
+        <!-- Tahun  -->
         <button
           @click="showYearModal = true"
           class="relative col-span-2 w-full border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-left hover:shadow-sm transition focus:outline-none overflow-hidden"
@@ -832,7 +979,6 @@ watch([month, year], ([m, y]) => {
         </button>
       </div>
 
-      <!-- MODAL BULAN -->
       <div
         v-if="showMonthModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -841,7 +987,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showMonthModal = false"
@@ -864,7 +1009,6 @@ watch([month, year], ([m, y]) => {
         </div>
       </div>
 
-      <!-- MODAL TAHUN -->
       <div
         v-if="showYearModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -873,7 +1017,6 @@ watch([month, year], ([m, y]) => {
         <div
           class="relative bg-white w-80 border border-slate-300 rounded-lg shadow-lg overflow-hidden"
         >
-          <!-- X pojok kanan -->
           <X
             class="absolute top-3 right-3 w-5 h-5 cursor-pointer text-slate-500 hover:text-slate-700"
             @click="showYearModal = false"
@@ -916,7 +1059,6 @@ watch([month, year], ([m, y]) => {
             v-if="showProgressDropdown"
             class="absolute z-20 mt-1 min-w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
           >
-            <!-- ALL -->
             <div
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress('all')"
@@ -928,9 +1070,8 @@ watch([month, year], ([m, y]) => {
               </span>
             </div>
 
-            <!-- PROGRESS LIST -->
             <div
-              v-for="prog in ['on progress', 'deal', 'waiting', 'canceled']"
+              v-for="prog in ['on progress', 'deal', 'postpone', 'canceled']"
               :key="prog"
               class="px-3 py-2 cursor-pointer hover:bg-slate-50 flex justify-start"
               @click="selectProgress(prog)"
@@ -942,7 +1083,7 @@ watch([month, year], ([m, y]) => {
                     'bg-blue-100 text-blue-800 border-blue-200',
                   prog === 'deal' &&
                     'bg-green-100 text-green-800 border-green-200',
-                  prog === 'waiting' &&
+                  prog === 'postpone' &&
                     'bg-yellow-100 text-yellow-800 border-yellow-200',
                   prog === 'canceled' &&
                     'bg-red-100 text-red-800 border-red-200',
@@ -1004,7 +1145,6 @@ watch([month, year], ([m, y]) => {
       </div>
 
       <div class="lg:col-span-5 flex gap-3 justify-end mb-4">
-        <!-- DOWNLOAD PDF -->
         <button
           @click="downloadPdfAll"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
@@ -1016,7 +1156,6 @@ watch([month, year], ([m, y]) => {
           Download PDF
         </button>
 
-        <!-- RESET -->
         <button
           @click="resetFilters"
           class="cursor-pointer inline-flex items-center gap-2 bg-linear-to-br from-indigo-700 to-blue-700 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition"
@@ -1030,9 +1169,13 @@ watch([month, year], ([m, y]) => {
       </div>
     </div>
 
-    <!-- TABLE -->
     <div
-      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll"
+      ref="tableWrapper"
+      class="overflow-x-auto rounded-lg border border-slate-200 hidden-scroll cursor-grab select-none"
+      @mousedown="startDrag"
+      @mouseup="stopDrag"
+      @mouseleave="stopDrag"
+      @mousemove="onDrag"
     >
       <table class="min-w-full bg-white rounded-lg text-sm table-fixed">
         <thead class="bg-linear-to-br from-indigo-700 to-blue-700 text-white">
@@ -1186,7 +1329,7 @@ watch([month, year], ([m, y]) => {
                 </button>
               </div>
             </td>
-            <!-- <td class="px-4 py-2 whitespace-nowrap">{{ i + 1 }}</td> -->
+
             <td class="px-4 py-2 whitespace-nowrap">
               {{ (currentPage - 1) * pageSize + i + 1 }}
             </td>
@@ -1275,7 +1418,7 @@ watch([month, year], ([m, y]) => {
             >
               <div
                 v-if="showHotelModal"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/10"
                 @click.self="closeHotelModal"
               >
                 <!-- Modal Card -->
@@ -1385,7 +1528,6 @@ watch([month, year], ([m, y]) => {
       @confirm="confirmDelete"
     />
 
-    <!-- Pagination -->
     <TablePagination
       :current-page="currentPage"
       :total-items="totalItems"
@@ -1393,7 +1535,19 @@ watch([month, year], ([m, y]) => {
       @update:page="(page) => (currentPage = page)"
     />
 
-    <!-- MODAL -->
+    <!-- <TablePagination
+      :current-page="currentPage"
+      :total-items="totalItems"
+      :page-size="pageSize"
+      @update:page="
+        (page) => {
+          currentPage = page;
+          getNewCustomers();
+        }
+      "
+    /> -->
+
+    <!-- Modal -->
     <transition name="modal">
       <div
         v-if="showModal"
@@ -1513,11 +1667,22 @@ watch([month, year], ([m, y]) => {
                       @click="
                         showModalProgressDropdown = !showModalProgressDropdown
                       "
-                      class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none focus:outline-none flex items-center justify-between"
+                      class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
                     >
-                      <span class="text-slate-700">
-                        {{ form.progress || "Select progress" }}
+                      <span
+                        v-if="form.progress"
+                        :class="[
+                          'px-3 py-1 text-xs rounded-full border font-medium',
+                          getProgressBadgeClass(form.progress),
+                        ]"
+                      >
+                        {{ form.progress }}
                       </span>
+
+                      <span v-else class="text-slate-700">
+                        Select progress
+                      </span>
+
                       <ChevronRight
                         class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
                         :class="
@@ -1525,7 +1690,6 @@ watch([month, year], ([m, y]) => {
                         "
                       />
                     </div>
-
                     <ul
                       v-if="showModalProgressDropdown"
                       class="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
@@ -1566,31 +1730,111 @@ watch([month, year], ([m, y]) => {
                 </div>
 
                 <!-- Segmen -->
-                <div class="flex flex-col mb-3">
+                <div id="segmen-dropdown" class="flex flex-col mb-3 relative">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Segmen
                   </label>
-                  <input
-                    v-model="form.segmen"
-                    placeholder="Segmen"
-                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                  />
+
+                  <div
+                    @click="toggleSegmenDropdown"
+                    class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
+                  >
+                    <span
+                      v-if="form.segmen"
+                      :class="[
+                        'px-3 py-1 text-xs rounded-full border font-medium',
+                        getSegmenBadgeClass(form.segmen),
+                      ]"
+                    >
+                      {{ form.segmen }}
+                    </span>
+
+                    <span v-else class="text-slate-800">Select segmen</span>
+
+                    <ChevronRight
+                      class="w-4 h-4 text-slate-500 transition-transform duration-200"
+                      :class="isSegmenDropdownOpen ? 'rotate-90' : 'rotate-0'"
+                    />
+                  </div>
+
+                  <!-- Dropdown -->
+                  <ul
+                    v-if="isSegmenDropdownOpen"
+                    class="absolute left-0 right-0 mt-21 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+                  >
+                    <li
+                      v-for="option in segmenOptions"
+                      :key="option.value"
+                      @click="onSelectSegmen(option.value)"
+                      class="px-4 py-2 cursor-pointer flex items-center gap-2 hover:bg-blue-50"
+                    >
+                      <span
+                        :class="[
+                          'w-[140px] px-2 py-1 text-xs text-center rounded-full font-medium border',
+                          option.color,
+                        ]"
+                      >
+                        {{ option.label }}
+                      </span>
+                    </li>
+                  </ul>
                 </div>
 
                 <!-- Via -->
-                <div class="flex flex-col mb-3">
+                <div class="flex flex-col mb-3 relative">
                   <label
                     class="flex items-center gap-1 mb-1 font-medium text-slate-700"
                   >
                     Via
                   </label>
-                  <input
-                    v-model="form.via"
-                    placeholder="Via"
-                    class="p-3 rounded-lg border border-slate-300 ring-1 ring-blue-50 focus:outline-none"
-                  />
+
+                  <!-- Input -->
+                  <div
+                    @click="showViaDropdown = !showViaDropdown"
+                    class="p-3 bg-white rounded-lg border border-slate-300 cursor-pointer select-none flex items-center justify-between"
+                  >
+                    <!-- Badge -->
+                    <span
+                      v-if="form.via"
+                      :class="[
+                        'px-3 py-1 text-xs rounded-full border font-medium',
+                        getViaBadgeClass(form.via),
+                      ]"
+                    >
+                      {{ form.via }}
+                    </span>
+
+                    <span v-else class="text-slate-700">Select via</span>
+
+                    <ChevronRight
+                      class="w-4 h-4 text-slate-500 transform transition-transform duration-200"
+                      :class="showViaDropdown ? 'rotate-90' : 'rotate-0'"
+                    />
+                  </div>
+
+                  <!-- Dropdown -->
+                  <ul
+                    v-if="showViaDropdown"
+                    class="absolute left-0 right-0 mt-21 bg-white rounded-lg shadow-lg border border-slate-200 z-50"
+                  >
+                    <li
+                      v-for="option in viaOptions"
+                      :key="option.value"
+                      @click="selectViaOption(option.value)"
+                      class="px-4 py-2 cursor-pointer hover:bg-blue-50"
+                    >
+                      <span
+                        :class="[
+                          'w-[120px] inline-block px-2 py-1 text-xs text-center rounded-full font-medium border',
+                          option.color,
+                        ]"
+                      >
+                        {{ option.label }}
+                      </span>
+                    </li>
+                  </ul>
                 </div>
 
                 <div class="flex flex-col mb-3">

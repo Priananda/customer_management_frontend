@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, onMounted } from "vue";
+import { ref, watch, computed } from "vue";
 import api from "../api/api";
 import { ArrowUp, ArrowDown, RotateCcw } from "lucide-vue-next";
 import leftIcon from "../assets/images/undraw_annotation.png";
@@ -15,20 +15,39 @@ const scrollContainer = ref(null);
 const searchText = ref("");
 const searchBy = ref("");
 const searchDate = ref("");
+// const isSearchMode = ref(false);
+const currentPage = ref(1);
 
-const fetchLogs = async () => {
+const fetchLogs = async (page = 1) => {
   loading.value = true;
   try {
-    const res = await api.get("/activity-logs");
-    logs.value =
-      res.data?.status && Array.isArray(res.data.data) ? res.data.data : [];
+    const res = await api.get("/activity-logs", {
+      params: {
+        page,
+        q: searchText.value || null,
+        role: searchBy.value || null,
+        date: searchDate.value || null,
+      },
+    });
+
+    if (res.data?.status) {
+      logs.value = res.data.data.data;
+      currentPage.value = res.data.data.current_page;
+    }
   } catch (e) {
-    console.error(e);
     logs.value = [];
   } finally {
     loading.value = false;
   }
 };
+
+let searchTimeout = null;
+watch([searchText, searchBy, searchDate], () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    fetchLogs(1);
+  }, 400);
+});
 
 const loadingDelete = ref(false);
 const confirmDeleteLog = ref(null);
@@ -39,7 +58,6 @@ const deleteLog = async (id) => {
     logs.value = logs.value.filter((log) => log.id !== id);
     confirmDeleteLog.value = null;
   } catch (e) {
-    console.error(e);
     alert("Failed to delete log");
     confirmDeleteLog.value = null;
   } finally {
@@ -57,21 +75,21 @@ const close = () => emit("close");
 const formatDate = (date) =>
   date ? new Date(date).toLocaleString("id-ID") : "-";
 
-const formatDescription = (log) => {
-  const model = log.log_name
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (l) => l.toUpperCase());
+// const formatDescription = (log) => {
+//   const model = log.log_name
+//     .replace(/_/g, " ")
+//     .replace(/\b\w/g, (l) => l.toUpperCase());
 
-  const actionMap = {
-    created: "dibuat",
-    updated: "diperbarui",
-    deleted: "dihapus",
-  };
+//   const actionMap = {
+//     created: "created",
+//     updated: "updated",
+//     deleted: "deleted",
+//   };
 
-  const action = actionMap[log.event] ?? log.event;
+//   const action = actionMap[log.event] ?? log.event;
 
-  return `${model} ${action}`;
-};
+//   return `${model} ${action}`;
+// };
 
 const eventBadge = (event) =>
   ({
@@ -89,6 +107,24 @@ const formatFileName = (fileName) => {
 const formatChanges = (log) => {
   const oldData = log.properties?.old || {};
   const newData = log.properties?.attributes || {};
+
+  if (log.event === "deleted") {
+    return Object.keys(oldData).map((key) => {
+      let value = oldData[key] ?? "-";
+
+      if (Array.isArray(value)) {
+        value = value
+          .map((v) => (v?.file_name ? formatFileName(v.file_name) : "-"))
+          .join(", ");
+      }
+
+      return {
+        field: key.replace(/_/g, " "),
+        from: value,
+        to: "(dihapus)",
+      };
+    });
+  }
 
   return Object.keys(newData)
     .filter((key) => {
@@ -112,37 +148,38 @@ const formatChanges = (log) => {
           .join(", ");
       }
 
-      if (!Array.isArray(from)) from = String(from);
-      if (!Array.isArray(to)) to = String(to);
-
       return {
         field: key.replace(/_/g, " "),
-        from,
-        to,
+        from: String(from),
+        to: String(to),
       };
     });
 };
 
-const filteredLogs = computed(() =>
-  logs.value.filter((log) => {
-    const desc = formatDescription(log).toLowerCase();
-    const by = log.causer?.name?.toLowerCase() || "";
-    const logDate = log.created_at ? log.created_at.split("T")[0] : "";
+// const filteredLogs = computed(() =>
+//   logs.value.filter((log) => {
+//     const desc = formatDescription(log).toLowerCase();
+//     const by = log.causer?.name?.toLowerCase() || "";
+//     const logDate = log.created_at ? log.created_at.split("T")[0] : "";
 
-    return (
-      (!searchText.value || desc.includes(searchText.value.toLowerCase())) &&
-      (!searchBy.value || by.includes(searchBy.value.toLowerCase())) &&
-      (!searchDate.value || logDate === searchDate.value)
-    );
-  })
-);
+//     return (
+//       (!searchText.value || desc.includes(searchText.value.toLowerCase())) &&
+//       (!searchBy.value || by.includes(searchBy.value.toLowerCase())) &&
+//       (!searchDate.value || logDate === searchDate.value)
+//     );
+//   })
+// );
 
 const isRotating = ref(false);
 const resetFilter = () => {
   isRotating.value = true;
+
   searchText.value = "";
   searchBy.value = "";
   searchDate.value = "";
+
+  fetchLogs(1);
+
   setTimeout(() => {
     isRotating.value = false;
   }, 600);
@@ -202,7 +239,7 @@ const scrollDown = () => {
           <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <input
               v-model="searchText"
-              placeholder="Search for activities"
+              placeholder="Search by name"
               class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none"
             />
             <input
@@ -236,7 +273,7 @@ const scrollDown = () => {
             Loading log activity...
           </div>
           <div
-            v-else-if="!filteredLogs.length"
+            v-else-if="!logs.length"
             class="py-10 text-center text-slate-500"
           >
             No Activity Logs
@@ -302,7 +339,7 @@ const scrollDown = () => {
             </transition>
 
             <li
-              v-for="log in filteredLogs"
+              v-for="log in logs"
               :key="log.id"
               class="rounded-lg border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50"
             >
@@ -310,7 +347,7 @@ const scrollDown = () => {
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
                     <p class="text-sm font-medium text-slate-800">
-                      {{ formatDescription(log) }}
+                      {{ log.title }}
                     </p>
                     <span
                       class="h-fit rounded-full border px-3 py-0.5 text-xs capitalize"

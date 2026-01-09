@@ -26,19 +26,15 @@ defineEmits(["confirm", "cancel"]);
     >
       <Transition name="zoom">
         <div v-if="show" class="bg-white p-6 rounded-xl shadow-md w-[360px]">
-          <!-- TITLE -->
           <h2 class="text-lg font-semibold text-slate-800 mb-2">
             {{ title }}
           </h2>
 
-          <!-- MESSAGE -->
           <p class="text-slate-600 text-sm leading-relaxed mb-6">
             {{ message }}
           </p>
 
-          <!-- ACTIONS -->
           <div class="flex justify-end gap-3">
-            <!-- CANCEL -->
             <button
               @click="$emit('cancel')"
               :disabled="props.loading"
@@ -47,13 +43,11 @@ defineEmits(["confirm", "cancel"]);
               {{ cancelText }}
             </button>
 
-            <!-- CONFIRM -->
             <button
               @click="$emit('confirm')"
               :disabled="props.loading"
               class="px-5 py-2 rounded-md bg-linear-to-r bg-slate-800 hover:bg-slate-700 text-white font-medium shadow-md transition flex items-center gap-2 cursor-pointer"
             >
-              <!-- LOADING -->
               <svg
                 v-if="props.loading"
                 class="w-4 h-4 animate-spin text-white"
