@@ -17,28 +17,27 @@ function lastName(name) {
 </script>
 
 <template>
-  <header class="h-16 bg-white flex items-center px-5 gap-4 shadow">
-    <!-- Hamburger toggle -->
-    <button
-      @click="emit('toggleSidebar')"
-      class="p-2 rounded hover:bg-gray-100"
-    >
+  <header class="h-16 bg-white flex items-center px-2 md:px-4 gap-3">
+    <button @click="emit('toggleSidebar')" class="p-2 rounded-md">
       <Menu class="w-6 h-6 text-gray-700" />
     </button>
 
-    <!-- Brand / logo -->
-    <div class="flex items-center justify-center gap-2">
-      <img :src="checklist" alt="Checklist" class="w-8 h-8 object-contain" />
-      <p class="text-lg font-semibold text-black">CS Management</p>
+    <div class="flex items-center gap-2">
+      <img
+        :src="checklist"
+        alt="Checklist"
+        class="w-7 h-7 md:w-8 md:h-8 object-contain"
+      />
+      <p class="text-md md:text-lg font-semibold text-black whitespace-nowrap">
+        CS Management
+      </p>
     </div>
 
-    <!-- User info -->
-    <p class="ml-auto text-lg font-semibold text-black">
-      Welcome, {{ lastName(props.user.name) }}
+    <p
+      class="ml-auto text-md md:text-lg font-semibold text-black truncate max-w-[140px] md:max-w-none"
+    >
+      <span class="hidden sm:inline">Welcome,</span>
+      {{ lastName(props.user.name) }}
     </p>
   </header>
 </template>
-
-<style scoped>
-/* Optional styling */
-</style>

@@ -2,6 +2,12 @@
 import { ref, computed, watch, onMounted } from "vue";
 import api from "../api/api";
 import { useAuthStore } from "@/stores/auth";
+import { ChevronLeft, ChevronRight } from "lucide-vue-next";
+
+import headerImg from "@/assets/images/data-at-work.png";
+import driverImg from "@/assets/images/male-avatar.png";
+import timelineImg from "@/assets/images/travelers.png";
+import dailyImg from "@/assets/images/travelers.png";
 
 /* ================= AUTH ================= */
 const auth = useAuthStore();
@@ -85,9 +91,23 @@ const buildSchedule = (customers, driverName) => {
         tour: r.tour_plan || "-",
         guest: customer.name,
         hotel: customer.hotel || "-",
-        lunch: parseJSON(r.lunch),
-        dinner: parseJSON(r.dinner),
-        activity: parseJSON(r.activity),
+        phone_hotel: r.phone_hotel || "-",
+        lokasi_hotel: r.lokasi_hotel || "-",
+        lunch: parseJSON(r.lunch).map((l) => ({
+          name: l.name || "-",
+          phone: l.phone || "-",
+          location: l.location || "-",
+        })),
+        dinner: parseJSON(r.dinner).map((d) => ({
+          name: d.name || "-",
+          phone: d.phone || "-",
+          location: d.location || "-",
+        })),
+        activity: parseJSON(r.activity).map((a) => ({
+          name: a.name || "-",
+          phone: a.phone || "-",
+          location: a.location || "-",
+        })),
         driverInfo: {
           name: transport.driver || "-",
           phone: transport.hp_driver || "-",
@@ -212,59 +232,140 @@ const routeTimeline = computed(() =>
 
 /* ================= INIT ================= */
 onMounted(loadDrivers);
+
+const showDriverModal = ref(false);
+const searchDriver = ref("");
+const filteredDrivers = computed(() => {
+  if (!searchDriver.value) return drivers.value;
+
+  return drivers.value.filter((d) =>
+    d.name.toLowerCase().includes(searchDriver.value.toLowerCase())
+  );
+});
+const selectDriver = (driver) => {
+  selectedDriver.value = driver;
+  showDriverModal.value = false;
+  searchDriver.value = "";
+};
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
-    <h1 class="text-2xl font-bold">Laporan Driver</h1>
-
-    <!-- SELECT DRIVER -->
-    <div class="bg-white p-4 rounded-xl border">
-      <label class="text-sm font-medium">Pilih Driver</label>
-      <select v-model="selectedDriver" class="w-full mt-2 border rounded p-2">
-        <option :value="null">-- Pilih Driver --</option>
-        <option v-for="d in drivers" :key="d.name" :value="d">
-          {{ d.name }}
-        </option>
-      </select>
+  <div
+    class="container p-4 max-w-sm md:max-w-3xl lg:max-w-6xl mx-auto space-y-7 min-h-screen"
+  >
+    <div class="-mt-5 flex items-center gap-6">
+      <img
+        :src="headerImg"
+        alt="Header Image"
+        class="w-24 h-24 object-contain"
+      />
+      <div>
+        <h2 class="text-xl font-bold text-black tracking-tight">
+          Laporan Driver
+        </h2>
+        <p class="text-md text-slate-600">
+          Ringkasan aktivitas & Rute perjalanan driver
+        </p>
+      </div>
     </div>
 
-    <!-- DRIVER INFO -->
-    <div v-if="driverInfo.name !== '-'" class="bg-white p-4 rounded-xl border">
-      <h2 class="font-semibold mb-2">Driver Information</h2>
-      <p><b>Name:</b> {{ driverInfo.name }}</p>
-      <p><b>Phone:</b> {{ driverInfo.phone }}</p>
-      <p><b>Note Operation:</b> {{ driverInfo.note_operation }}</p>
-      <p><b>Report:</b> {{ driverInfo.report }}</p>
+    <!-- DRIVER SELECT -->
+    <div class="bg-white rounded-lg border border-slate-200 p-5">
+      <label class="text-md font-medium text-slate-600">Pilih Driver</label>
+
+      <button
+        @click="showDriverModal = true"
+        class="mt-3 w-full flex items-center justify-between border border-slate-300 rounded-lg px-4 py-2 hover:bg-slate-100 transition"
+      >
+        <span class="text-sm text-slate-700">
+          {{ selectedDriver?.name || "Search for driver name..." }}
+        </span>
+        <span class="text-sm text-slate-400">Search</span>
+      </button>
     </div>
 
-    <!-- TIMELINE -->
-    <div v-if="routeTimeline.length" class="bg-white p-4 rounded-xl border">
-      <h2 class="font-semibold mb-2">Daily Route Timeline</h2>
-      <ul class="text-sm space-y-1">
-        <li v-for="r in routeTimeline" :key="r.date">
-          {{ r.date }} → {{ r.tour }}
-        </li>
-      </ul>
+    <!-- MODAL SEARCH DRIVER -->
+    <div
+      v-if="showDriverModal"
+      class="PX-2 fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+    >
+      <div
+        class="bg-white w-full max-w-md rounded-lg p-5 space-y-4 animate-scale"
+      >
+        <div class="flex justify-between items-center">
+          <h2 class="text-sm font-medium text-slate-800">Search Driver</h2>
+          <button
+            @click="showDriverModal = false"
+            class="text-sm text-slate-600 hover:text-slate-700"
+          >
+            Tutup
+          </button>
+        </div>
+
+        <input
+          v-model="searchDriver"
+          type="text"
+          placeholder="Type the driver name..."
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+        />
+
+        <transition-group
+          name="list"
+          tag="div"
+          class="max-h-64 overflow-y-auto rounded-lg hide-scrollbar"
+        >
+          <div
+            v-for="d in filteredDrivers"
+            :key="d.name"
+            @click="selectDriver(d)"
+            class="px-4 py-2 cursor-pointer hover:bg-blue-50 transition"
+          >
+            <p class="text-sm text-slate-700">{{ d.name }}</p>
+          </div>
+        </transition-group>
+
+        <div
+          v-if="!filteredDrivers.length"
+          class="px-4 py-4 text-center text-sm text-slate-400"
+        >
+          Driver tidak ditemukan
+        </div>
+      </div>
     </div>
 
     <!-- CALENDAR -->
-    <div class="bg-white border rounded-xl p-4">
+    <div class="bg-white rounded-lg border border-slate-200 p-5">
       <div class="flex justify-between items-center mb-4">
-        <button @click="prevMonth">←</button>
-        <h2 class="font-semibold">{{ monthLabel }}</h2>
-        <button @click="nextMonth">→</button>
+        <button
+          @click="prevMonth"
+          class="p-1 rounded-lg hover:bg-slate-100 transition"
+        >
+          <ChevronLeft class="w-4 h-4 text-slate-600" />
+        </button>
+
+        <h2 class="text-md font-medium text-black">
+          {{ monthLabel }}
+        </h2>
+
+        <button
+          @click="nextMonth"
+          class="p-1 rounded-lg hover:bg-slate-100 transition"
+        >
+          <ChevronRight class="w-4 h-4 text-slate-600" />
+        </button>
       </div>
 
-      <div class="grid grid-cols-7 gap-2 text-center">
+      <div class="grid grid-cols-7 gap-2">
         <div
           v-for="d in calendarDays"
           :key="d.date"
           @click="selectedDate = d.date"
-          class="p-2 rounded-lg cursor-pointer text-sm"
+          class="h-9 flex items-center justify-center rounded-lg text-sm cursor-pointer transition"
           :class="[
-            d.hasRange ? 'bg-emerald-300 line-through' : 'bg-gray-100',
-            selectedDate === d.date ? 'ring-2 ring-emerald-600' : '',
+            d.hasRange
+              ? 'bg-linear-to-br from-indigo-700 to-blue-700 text-white'
+              : 'bg-slate-100 text-slate-600',
+            selectedDate === d.date ? 'ring-1 ring-indigo-700' : '',
           ]"
         >
           {{ d.day }}
@@ -272,57 +373,183 @@ onMounted(loadDrivers);
       </div>
     </div>
 
-    <!-- DETAIL -->
-    <!-- DETAIL -->
-    <div v-if="selectedDate">
-      <h2 class="font-semibold mb-3">Trip tanggal {{ selectedDate }}</h2>
+    <!-- DRIVER INFO -->
+    <div
+      v-if="driverInfo.name !== '-'"
+      class="flex items-center gap-6 bg-white rounded-lg border border-slate-200 p-5"
+    >
+      <img
+        :src="driverImg"
+        alt="Driver"
+        class="w-18 h-18 rounded-full object-contain"
+      />
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+        <div>
+          <p class="text-sm text-slate-500">Driver</p>
+          <p class="text-sm font-medium text-black">
+            {{ driverInfo.name || "-" }}
+          </p>
+        </div>
+        <div>
+          <p class="text-sm text-slate-500">Phone</p>
+          <p class="text-sm text-slate-700">{{ driverInfo.phone || "-" }}</p>
+        </div>
+        <div>
+          <p class="text-sm text-slate-500">Note Operation</p>
+          <p class="text-sm text-slate-700">
+            {{ driverInfo.note_operation || "-" }}
+          </p>
+        </div>
+        <div>
+          <p class="text-sm text-slate-500">Report</p>
+          <p class="text-sm text-slate-700">{{ driverInfo.report || "-" }}</p>
+        </div>
+      </div>
+    </div>
 
-      <div v-if="!dailySchedules.length" class="text-gray-400">
+    <!-- TIMELINE -->
+    <div
+      v-if="routeTimeline.length"
+      class="bg-white rounded-lg border border-slate-200 p-5"
+    >
+      <!-- HEADER TIMELINE -->
+      <div class="flex items-center gap-6 mb-4">
+        <img
+          :src="timelineImg"
+          alt="Timeline"
+          class="w-24 h-24 object-contain"
+        />
+
+        <div>
+          <h2 class="text-md font-medium text-slate-900">
+            Daily Route Timeline
+          </h2>
+          <p class="text-sm text-slate-500">
+            Rute perjalanan driver berdasarkan tanggal
+          </p>
+        </div>
+      </div>
+
+      <!-- LIST TIMELINE -->
+      <div class="space-y-3">
+        <div
+          v-for="r in routeTimeline"
+          :key="r.date"
+          class="flex gap-3 items-start"
+        >
+          <!-- DOT -->
+          <div class="w-2 h-2 mt-2 bg-blue-700 rounded-full shrink-0"></div>
+
+          <!-- CARD -->
+          <div class="flex-1 border border-slate-200 rounded-lg px-3 py-2">
+            <p class="text-sm text-black mb-2">{{ r.date || "-" }}</p>
+            <p class="text-sm text-black">
+              {{ r.tour || "-" }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAILY DETAIL -->
+    <div
+      v-if="selectedDate"
+      class="bg-white border border-slate-200 rounded-lg p-5"
+    >
+      <!-- HEADER -->
+      <div class="flex gap-6 items-center mb-3">
+        <!-- IMAGE -->
+        <div class="w-28 shrink-0 flex justify-center">
+          <img
+            :src="dailyImg"
+            alt="Daily Detail"
+            class="w-24 h-24 object-contain"
+          />
+        </div>
+
+        <!-- TEXT -->
+        <div>
+          <h2 class="text-md font-medium text-black">
+            Trip Tanggal {{ selectedDate }}
+          </h2>
+          <p class="text-sm text-slate-500">
+            Detail perjalanan driver pada tanggal ini
+          </p>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE -->
+      <div v-if="!dailySchedules.length" class="text-sm text-slate-400">
         Tidak ada trip
       </div>
 
+      <!-- TRIP LIST (v-for BELOW HEADER) -->
       <div
         v-for="(s, i) in dailySchedules"
         :key="i"
-        class="bg-white border rounded-xl p-4 mb-4 space-y-3"
+        class="border border-slate-200 rounded-lg p-5 space-y-4"
       >
-        <h3 class="text-lg font-semibold text-emerald-700">
-          {{ s.tour }}
-        </h3>
-
-        <p class="text-sm">
-          👤 Guest: <b>{{ s.guest }}</b>
-        </p>
-        <p class="text-sm">🏨 Hotel: {{ s.hotel }}</p>
-
-        <div>
-          <p class="font-medium text-sm">🎯 Activity</p>
-          <ul v-if="s.activity.length" class="list-disc ml-5 text-sm">
-            <li v-for="(a, idx) in s.activity" :key="idx">
-              {{ a.name }} ({{ a.location }} | {{ a.phone }})
-            </li>
-          </ul>
-          <p v-else class="text-gray-400 text-sm">-</p>
+        <div class="border-l-4 border-blue-700 pl-3 mb-3">
+          <p class="text-sm font-medium text-black mb-2">
+            Tour Plan: {{ s.tour || "-" }}
+          </p>
+          <p class="text-sm text-black mb-2">
+            Guest Name: {{ s.guest || "-" }} | Nama Hotel: {{ s.hotel || "-" }}
+          </p>
+          <p class="text-sm text-black">
+            Phone Hotel: {{ s.phone_hotel || "-" }} | Lokasi Hotel:
+            {{ s.lokasi_hotel || "-" }}
+          </p>
         </div>
 
-        <div>
-          <p class="font-medium text-sm">🍽 Lunch</p>
-          <ul v-if="s.lunch.length" class="list-disc ml-5 text-sm">
-            <li v-for="(l, idx) in s.lunch" :key="idx">
-              {{ l.name }} ({{ l.location }} | {{ l.phone }})
-            </li>
-          </ul>
-          <p v-else class="text-gray-400 text-sm">-</p>
-        </div>
+        <div class="grid md:grid-cols-3 gap-4 pt-5">
+          <!-- ACTIVITY -->
+          <div class="mb-4">
+            <p class="text-md font-medium text-black mb-2">Activity</p>
+            <div
+              v-for="(a, idx) in s.activity"
+              :key="idx"
+              class="bg-white border border-slate-200 rounded-lg p-3 mb-2"
+            >
+              <p class="font-medium text-black mb-1">{{ a.name || "-" }}</p>
+              <ul class="list-disc ml-5 text-sm text-slate-700">
+                <li>{{ a.phone || "-" }}</li>
+                <li>{{ a.location || "-" }}</li>
+              </ul>
+            </div>
+          </div>
 
-        <div>
-          <p class="font-medium text-sm">🌙 Dinner</p>
-          <ul v-if="s.dinner.length" class="list-disc ml-5 text-sm">
-            <li v-for="(d, idx) in s.dinner" :key="idx">
-              {{ d.name }} ({{ d.location }} | {{ d.phone }})
-            </li>
-          </ul>
-          <p v-else class="text-gray-400 text-sm">-</p>
+          <!-- LUNCH -->
+          <div class="mb-4">
+            <p class="text-md font-medium text-black mb-2">Lunch</p>
+            <div
+              v-for="(l, idx) in s.lunch"
+              :key="idx"
+              class="bg-white border border-slate-200 rounded-lg p-3 mb-2"
+            >
+              <p class="font-medium text-black mb-1">{{ l.name || "-" }}</p>
+              <ul class="list-disc ml-5 text-sm text-slate-700">
+                <li>{{ l.phone || "-" }}</li>
+                <li>{{ l.location || "-" }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- DINNER -->
+          <div class="mb-4">
+            <p class="text-md font-medium text-black mb-2">Dinner</p>
+            <div
+              v-for="(d, idx) in s.dinner"
+              :key="idx"
+              class="bg-white border border-slate-200 rounded-lg p-3 mb-2"
+            >
+              <p class="font-medium text-black mb-1">{{ d.name || "-" }}</p>
+              <ul class="list-disc ml-5 text-sm text-slate-700">
+                <li>{{ d.phone || "-" }}</li>
+                <li>{{ d.location || "-" }}</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
